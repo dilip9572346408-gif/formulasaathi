@@ -24,7 +24,7 @@ ALL_SUBJECTS = [
     "Maithili (मैथिली)",
     "Sanskrit (संस्कृत)",
     "English (अंग्रेजी)",
-    "Urdu (उर्दू)"
+    "Urdu (Urdu - اردو)"
 ]
 
 CLASSES_LIST = [
@@ -46,20 +46,21 @@ api_key = st.secrets.get("GEMINI_API_KEY")
 with st.sidebar:
     st.header("🚀 FormulaSaathi Pro")
     st.markdown("---")
-    st.markdown("**Platform Features:**\n1. Ultra Fast Speed\n2. Unlimited Questions\n3. Clean Text Format")
+    st.markdown("**Platform Features:**\n1. Auto Background Retry\n2. Unlimited Questions\n3. Clean Text Format")
 
 st.title("🚀 FormulaSaathi & Teacher Pro Suite")
 
 tab1, tab2 = st.tabs(["👨‍🎓 Student Free Zone", "👨‍🏫 Teacher A4 Question Paper Generator"])
 
-# सुपर-फास्ट और सेफ जनरेटर फंक्शन
-def call_gemini_safe(prompt_text):
+# बैकग्राउंड में चुपचाप ऑटो-रिट्राई करने वाला मजबूत फंक्शन (बिना यूजर को परेशान किए)
+def call_gemini_silent_retry(prompt_text):
     if not api_key:
         return None
     
-    for attempt in range(2):
+    client = genai.Client(api_key=api_key)
+    # अगर सर्वर व्यस्त हो, तो पीछे बैकग्राउंड में 5 बार तक खुद कोशिश करेगा
+    for attempt in range(5):
         try:
-            client = genai.Client(api_key=api_key)
             response = client.models.generate_content(
                 model="gemini-1.5-flash",
                 contents=prompt_text
@@ -67,7 +68,9 @@ def call_gemini_safe(prompt_text):
             if response and response.text:
                 return response.text
         except Exception as e:
-            time.sleep(1.5)
+            # हर कोशिश के बाद थोड़ा समय बढ़ाकर इंतजार करेगा (Exponential Backoff)
+            wait_time = (attempt + 1) * 1.5
+            time.sleep(wait_time)
             continue
     return None
 
@@ -98,7 +101,7 @@ with tab1:
         elif not student_query.strip():
             st.warning("⚠️ कृपया अपना सवाल लिखें।")
         else:
-            with st.spinner("⚡ AI समाधान तैयार कर रहा है..."):
+            with st.spinner("⚡ AI समाधान तैयार कर रहा है (बैकग्राउंड ऑटो-कनेक्ट जारी है)..."):
                 try:
                     prompt = f"""
                     Expert tutor for {stu_class} studying {stu_subject}.
@@ -106,12 +109,12 @@ with tab1:
                     Query: {student_query}.
                     Provide clear steps and 1 practice question.
                     """
-                    res_text = call_gemini_safe(prompt)
+                    res_text = call_gemini_silent_retry(prompt)
                     if res_text:
                         st.success("✅ समाधान तैयार है!")
                         st.markdown(res_text)
                     else:
-                        st.warning("⚠️ सर्वर व्यस्त है। कृपया दोबारा क्लिक करें।")
+                        st.warning("⚠️ सर्वर अत्यधिक व्यस्त है। कृपया 5 सेकंड रुककर दोबारा बटन दबाएं।")
                 except Exception as e:
                     st.error(f"त्रुटि (Error): {e}")
 
@@ -178,7 +181,7 @@ with tab2:
         elif total_questions == 0:
             st.warning("⚠️ कृपया कम से कम किसी एक सेक्शन में प्रश्नों की संख्या दर्ज करें!")
         else:
-            with st.spinner("⚡ प्रश्न-पत्र जनरेट हो रहा है..."):
+            with st.spinner("⚡ प्रश्न-पत्र जनरेट हो रहा है (बैकग्राउंड ऑटो-कनेक्ट जारी है)..."):
                 try:
                     t_prompt = f"""
                     Generate exam Question Paper in clean HTML format (ONLY inner HTML tags like <h4>, <ol>, <li>, <p>, NO <html>, <head>, <body> tags, and NO markdown ```html fences).
@@ -197,7 +200,7 @@ with tab2:
                     - {"At the end, insert <div style='page-break-before: always; border-top: 1px dashed #000; margin-top: 15px; padding-top: 10px;'><h4>Answer Key (उत्तर माला)</h4></div> with brief answers." if include_answers else ""}
                     """
                     
-                    res_html = call_gemini_safe(t_prompt)
+                    res_html = call_gemini_silent_retry(t_prompt)
                     
                     if res_html:
                         clean_questions_html = res_html.replace("```html", "").replace("```", "").strip()
@@ -270,7 +273,7 @@ with tab2:
                         st.markdown("##### 📄 लाइव A4 प्रिंट प्रीव्यू:")
                         components.html(full_a4_html, height=650, scrolling=True)
                     else:
-                        st.error("⚠️ सर्वर व्यस्त होने के कारण उत्तर नहीं मिल पाया। कृपया पुनः प्रयास करें।")
+                        st.error("⚠️ सर्वर अत्यधिक व्यस्त है। कृपया कुछ सेकंड बाद पुनः प्रयास करें।")
 
                 except Exception as e:
                     st.error(f"त्रुटि (Error): {e}")
