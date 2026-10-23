@@ -1,6 +1,6 @@
 import streamlit as st
 import streamlit.components.v1 as components
-from google import genai
+import google.generativeai as genai
 import json
 import time
 
@@ -40,32 +40,37 @@ LANGUAGES_LIST = [
     "Hindi (फुल्ली हिंदी मीडियम)"
 ]
 
-# सीधे Streamlit Secrets से API Key ले लेगा (सुरक्षित तरीका)
+# सीधे Streamlit Secrets से API Key लेकर कॉन्फ़िगर करें
 api_key = st.secrets.get("GEMINI_API_KEY")
+if api_key:
+    genai.configure(api_key=api_key)
 
 with st.sidebar:
     st.header("🚀 FormulaSaathi Pro")
     st.markdown("---")
-    st.markdown("**Platform Features:**\n1. Ultra Fast Speed\n2. Unlimited Questions\n3. Clean Text Format")
+    st.markdown("**Platform Features:**\n1. Instant Speed\n2. Unlimited Questions\n3. Clean Text Format")
 
 st.title("🚀 FormulaSaathi & Teacher Pro Suite")
 
 tab1, tab2 = st.tabs(["👨‍🎓 Student Free Zone", "👨‍🏫 Teacher A4 Question Paper Generator"])
 
-# स्मार्ट और सुपर-फास्ट ऑटो-रिट्राई फंक्शन (सिर्फ असली और तेज मॉडल के साथ)
-def call_gemini_with_smart_retry(client, prompt_text):
-    # गूगल का सबसे तेज और स्थिर मॉडल
-    models_to_try = ["gemini-1.5-flash"]
+# सुपर-फास्ट और सेफ जनरेटर फंक्शन
+def call_gemini_safe(prompt_text):
+    if not api_key:
+        return None
     
-    for attempt in range(3): # कुल 3 बार कोशिश करेगा
-        for m in models_to_try:
-            try:
-                response = client.models.generate_content(model=m, contents=prompt_text)
-                if response and response.text:
-                    return response.text
-            except Exception as e:
-                time.sleep(1) # 1 सेकंड रुककर दोबारा प्रयास करेगा
-                continue
+    # सबसे भरोसेमंद और तेज मॉडल
+    model_name = "gemini-1.5-flash"
+    
+    for attempt in range(3):
+        try:
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(prompt_text)
+            if response and response.text:
+                return response.text
+        except Exception as e:
+            time.sleep(1.5)
+            continue
     return None
 
 # ==========================================
@@ -95,21 +100,20 @@ with tab1:
         elif not student_query.strip():
             st.warning("⚠️ कृपया अपना सवाल लिखें।")
         else:
-            with st.spinner("⚡ AI समाधान तैयार कर रहा है (सुपर-फास्ट मोड सक्रिय है)..."):
+            with st.spinner("⚡ AI समाधान तैयार कर रहा है..."):
                 try:
-                    client = genai.Client(api_key=api_key)
                     prompt = f"""
                     Expert tutor for {stu_class} studying {stu_subject}.
                     Language: {stu_lang}. No dollar signs ($) or raw LaTeX. Use clean text (e.g., x^2).
                     Query: {student_query}.
                     Provide clear steps and 1 practice question.
                     """
-                    res_text = call_gemini_with_smart_retry(client, prompt)
+                    res_text = call_gemini_safe(prompt)
                     if res_text:
                         st.success("✅ समाधान तैयार है!")
                         st.markdown(res_text)
                     else:
-                        st.warning("⚠️ सर्वर अभी अत्यधिक व्यस्त है। कृपया एक बार फिर से बटन पर क्लिक करें।")
+                        st.warning("⚠️ सर्वर व्यस्त है या API Key में दिक्कत है। कृपया दोबारा क्लिक करें।")
                 except Exception as e:
                     st.error(f"त्रुटि (Error): {e}")
 
@@ -176,10 +180,8 @@ with tab2:
         elif total_questions == 0:
             st.warning("⚠️ कृपया कम से कम किसी एक सेक्शन में प्रश्नों की संख्या दर्ज करें!")
         else:
-            with st.spinner("⚡ प्रश्न-पत्र जनरेट हो रहा है (सुपर-फास्ट गति सक्रिय है)..."):
+            with st.spinner("⚡ प्रश्न-पत्र जनरेट हो रहा है..."):
                 try:
-                    client = genai.Client(api_key=api_key)
-                        
                     t_prompt = f"""
                     Generate exam Question Paper in clean HTML format (ONLY inner HTML tags like <h4>, <ol>, <li>, <p>, NO <html>, <head>, <body> tags, and NO markdown ```html fences).
                     
@@ -197,7 +199,7 @@ with tab2:
                     - {"At the end, insert <div style='page-break-before: always; border-top: 1px dashed #000; margin-top: 15px; padding-top: 10px;'><h4>Answer Key (उत्तर माला)</h4></div> with brief answers." if include_answers else ""}
                     """
                     
-                    res_html = call_gemini_with_smart_retry(client, t_prompt)
+                    res_html = call_gemini_safe(t_prompt)
                     
                     if res_html:
                         clean_questions_html = res_html.replace("```html", "").replace("```", "").strip()
