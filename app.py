@@ -40,11 +40,11 @@ LANGUAGES_LIST = [
     "Hindi (फुल्ली हिंदी मीडियम)"
 ]
 
-# साइडबार में API Key सेटअप
+# सीधे Streamlit Secrets से API Key ले लेगा (सुरक्षित तरीका)
+api_key = st.secrets.get("GEMINI_API_KEY")
+
 with st.sidebar:
-    st.header("🔑 AI सेटअप")
-    api_key = st.text_input("अपना Google Gemini API Key यहाँ डालें:", type="password", placeholder="Paste your API key here...")
-    st.caption("आपकी API Key सुरक्षित रहती है और सेव नहीं होती।")
+    st.header("🚀 FormulaSaathi Pro")
     st.markdown("---")
     st.markdown("**Platform Features:**\n1. Auto 503 Error Handler\n2. Unlimited Questions\n3. Clean Text Format")
 
@@ -88,7 +88,7 @@ with tab1:
     
     if st.button("🔍 तुरंत हल देखें"):
         if not api_key:
-            st.error("⚠️ कृपया बाईं तरफ (Sidebar) में अपना Google API Key डालें!")
+            st.error("⚠️ कृपया Streamlit Secrets में GEMINI_API_KEY सेट करें!")
         elif stu_class == "--- कक्षा चुनें ---" or stu_subject == "--- कृपया विषय चुनें (Select Subject) ---":
             st.warning("⚠️ कृपया पहले सही कक्षा और विषय चुनें!")
         elif not student_query.strip():
@@ -167,7 +167,7 @@ with tab2:
 
     if st.button("✨ सुपर-फास्ट A4 क्वेश्चन पेपर तैयार करें"):
         if not api_key:
-            st.error("⚠️ कृपया बाईं तरफ (Sidebar) में अपना Google API Key डालें!")
+            st.error("⚠️ कृपया Streamlit Secrets में GEMINI_API_KEY सेट करें!")
         elif t_class == "--- कक्षा चुनें ---" or t_subject == "--- कृपया विषय चुनें (Select Subject) ---":
             st.warning("⚠️ कृपया पहले सही कक्षा और विषय चुनें!")
         elif not topic_name.strip():
