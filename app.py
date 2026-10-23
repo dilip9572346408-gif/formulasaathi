@@ -46,15 +46,16 @@ api_key = st.secrets.get("GEMINI_API_KEY")
 with st.sidebar:
     st.header("🚀 FormulaSaathi Pro")
     st.markdown("---")
-    st.markdown("**Platform Features:**\n1. Auto 503 Error Handler\n2. Unlimited Questions\n3. Clean Text Format")
+    st.markdown("**Platform Features:**\n1. Ultra Fast Speed\n2. Unlimited Questions\n3. Clean Text Format")
 
 st.title("🚀 FormulaSaathi & Teacher Pro Suite")
 
 tab1, tab2 = st.tabs(["👨‍🎓 Student Free Zone", "👨‍🏫 Teacher A4 Question Paper Generator"])
 
-# स्मार्ट ऑटो-रिट्राई फंक्शन जो 503 एरर को स्वतः संभाल लेगा
+# स्मार्ट और सुपर-फास्ट ऑटो-रिट्राई फंक्शन (सिर्फ असली और तेज मॉडल के साथ)
 def call_gemini_with_smart_retry(client, prompt_text):
-    models_to_try = ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-1.5-flash"]
+    # गूगल का सबसे तेज और स्थिर मॉडल
+    models_to_try = ["gemini-1.5-flash"]
     
     for attempt in range(3): # कुल 3 बार कोशिश करेगा
         for m in models_to_try:
@@ -63,7 +64,7 @@ def call_gemini_with_smart_retry(client, prompt_text):
                 if response and response.text:
                     return response.text
             except Exception as e:
-                time.sleep(1.5) # थोड़ा रुककर अगला प्रयास करेगा
+                time.sleep(1) # 1 सेकंड रुककर दोबारा प्रयास करेगा
                 continue
     return None
 
@@ -94,7 +95,7 @@ with tab1:
         elif not student_query.strip():
             st.warning("⚠️ कृपया अपना सवाल लिखें।")
         else:
-            with st.spinner("⚡ AI समाधान तैयार कर रहा है (सर्वर लोड स्वतः प्रबंधित हो रहा है)..."):
+            with st.spinner("⚡ AI समाधान तैयार कर रहा है (सुपर-फास्ट मोड सक्रिय है)..."):
                 try:
                     client = genai.Client(api_key=api_key)
                     prompt = f"""
@@ -116,7 +117,7 @@ with tab1:
 # TAB 2: TEACHER A4 QUESTION PAPER GENERATOR
 # ==========================================
 with tab2:
-    st.subheader("📄 सुपर-फास्ट A4 क्वेश्चन पेपर जनरेटर (Auto 503 Recovery)")
+    st.subheader("📄 सुपर-फास्ट A4 क्वेश्चन पेपर जनरेटर")
     
     st.markdown("#### 1. परीक्षा और माध्यम का विवरण")
     c1, c2, c3, c4 = st.columns(4)
@@ -175,7 +176,7 @@ with tab2:
         elif total_questions == 0:
             st.warning("⚠️ कृपया कम से कम किसी एक सेक्शन में प्रश्नों की संख्या दर्ज करें!")
         else:
-            with st.spinner("⚡ प्रश्न-पत्र जनरेट हो रहा है (ऑटो-रिकवरी सक्रिय है)..."):
+            with st.spinner("⚡ प्रश्न-पत्र जनरेट हो रहा है (सुपर-फास्ट गति सक्रिय है)..."):
                 try:
                     client = genai.Client(api_key=api_key)
                         
