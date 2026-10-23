@@ -1,6 +1,6 @@
 import streamlit as st
 import streamlit.components.v1 as components
-import google.generativeai as genai
+from google import genai
 import json
 import time
 
@@ -40,15 +40,13 @@ LANGUAGES_LIST = [
     "Hindi (फुल्ली हिंदी मीडियम)"
 ]
 
-# सीधे Streamlit Secrets से API Key लेकर कॉन्फ़िगर करें
+# सीधे Streamlit Secrets से API Key ले लेगा
 api_key = st.secrets.get("GEMINI_API_KEY")
-if api_key:
-    genai.configure(api_key=api_key)
 
 with st.sidebar:
     st.header("🚀 FormulaSaathi Pro")
     st.markdown("---")
-    st.markdown("**Platform Features:**\n1. Instant Speed\n2. Unlimited Questions\n3. Clean Text Format")
+    st.markdown("**Platform Features:**\n1. Ultra Fast Speed\n2. Unlimited Questions\n3. Clean Text Format")
 
 st.title("🚀 FormulaSaathi & Teacher Pro Suite")
 
@@ -59,13 +57,13 @@ def call_gemini_safe(prompt_text):
     if not api_key:
         return None
     
-    # सबसे भरोसेमंद और तेज मॉडल
-    model_name = "gemini-1.5-flash"
-    
-    for attempt in range(3):
+    for attempt in range(2):
         try:
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(prompt_text)
+            client = genai.Client(api_key=api_key)
+            response = client.models.generate_content(
+                model="gemini-1.5-flash",
+                contents=prompt_text
+            )
             if response and response.text:
                 return response.text
         except Exception as e:
@@ -113,7 +111,7 @@ with tab1:
                         st.success("✅ समाधान तैयार है!")
                         st.markdown(res_text)
                     else:
-                        st.warning("⚠️ सर्वर व्यस्त है या API Key में दिक्कत है। कृपया दोबारा क्लिक करें।")
+                        st.warning("⚠️ सर्वर व्यस्त है। कृपया दोबारा क्लिक करें।")
                 except Exception as e:
                     st.error(f"त्रुटि (Error): {e}")
 
@@ -272,7 +270,7 @@ with tab2:
                         st.markdown("##### 📄 लाइव A4 प्रिंट प्रीव्यू:")
                         components.html(full_a4_html, height=650, scrolling=True)
                     else:
-                        st.error("⚠️ सर्वर पर अत्यधिक लोड होने के कारण उत्तर नहीं मिल पाया। कृपया पुनः प्रयास करें।")
+                        st.error("⚠️ सर्वर व्यस्त होने के कारण उत्तर नहीं मिल पाया। कृपया पुनः प्रयास करें।")
 
                 except Exception as e:
                     st.error(f"त्रुटि (Error): {e}")
