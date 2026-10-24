@@ -63,7 +63,7 @@ st.title("🚀 FormulaSaathi & Teacher Pro Suite")
 
 tab1, tab2, tab3 = st.tabs(["👨‍🎓 Student Zone & Solver", "👨‍🏫 Teacher A4 Paper Generator", "🎙️ Voice Assistant & Interactive Quiz"])
 
-# सुपर-फास्ट कैश्ड फंक्शन जो अब असली एरर भी बताएगा
+# सुपर-फास्ट कैश्ड फंक्शन (अपडेटेड मॉडल नाम के साथ)
 @st.cache_data(show_spinner=False, ttl=86400)
 def cached_gemini_call(prompt_text):
     if not api_keys_pool:
@@ -75,7 +75,7 @@ def cached_gemini_call(prompt_text):
         try:
             client = genai.Client(api_key=current_key)
             response = client.models.generate_content(
-                model="gemini-1.5-flash",
+                model="gemini-2.5-flash",
                 contents=prompt_text
             )
             if response and response.text:
@@ -118,7 +118,7 @@ with tab1:
                 try:
                     if api_keys_pool:
                         cl = genai.Client(api_key=next(key_cycler))
-                        t_res = cl.models.generate_content(model="gemini-1.5-flash", contents=[trans_prompt, {"mime_type": "audio/wav", "data": audio_bytes}])
+                        t_res = cl.models.generate_content(model="gemini-2.5-flash", contents=[trans_prompt, {"mime_type": "audio/wav", "data": audio_bytes}])
                         if t_res and t_res.text:
                             transcribed_voice_text = t_res.text
                             st.info(f"📝 {transcribed_voice_text}")
