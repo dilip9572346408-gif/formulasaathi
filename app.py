@@ -60,13 +60,13 @@ with st.sidebar:
     st.header("🚀 FormulaSaathi Pro")
     st.markdown("---")
     st.markdown(f"**Loaded Keys:** {len(api_keys_pool)}")
-    st.markdown("1. Native Audio Mic Support\n2. Bilingual Everywhere\n3. 503 Auto-Retry Protection")
+    st.markdown("1. Multi-Photo Upload Support\n2. Native Voice Audio Mic\n3. Turbo Speed & 503 Retry")
 
 st.title("🚀 FormulaSaathi & Teacher Pro Suite")
 
 tab1, tab2, tab3 = st.tabs(["👨‍🎓 Student Zone & Solver", "👨‍🏫 Teacher A4 Paper Generator", "🎙️ Voice Assistant & Interactive Quiz"])
 
-# ऑटो-रीट्राई और 503 एरर हैंडलिंग वाला मजबूत जेमिनी कॉल फंक्शन
+# टर्बो स्पीड और ऑटो-रीट्राई वाला मजबूत जेमिनी कॉल फंक्शन
 def call_gemini(contents_list):
     if not api_keys_pool:
         return "ERROR: No API Keys found in Streamlit Secrets!"
@@ -86,7 +86,7 @@ def call_gemini(contents_list):
             except Exception as e:
                 last_error = str(e)
                 if "503" in last_error or "UNAVAILABLE" in last_error or "ResourceExhausted" in last_error:
-                    time.sleep(1)
+                    time.sleep(0.5)
                 continue
     return f"API_ERROR: {last_error}"
 
@@ -94,7 +94,7 @@ def call_gemini(contents_list):
 # TAB 1: STUDENT ZONE & MULTIMODAL SOLVER
 # ==========================================
 with tab1:
-    st.subheader("💡 Smart Doubt Solver (Text, Photo & Live Voice Mic)")
+    st.subheader("💡 Smart Doubt Solver (Multi-Photo, Text & Voice Audio)")
     
     col_s1, col_s2 = st.columns([1, 2])
     
@@ -104,8 +104,9 @@ with tab1:
         stu_lang = st.selectbox("माध्यम चुनें", LANGUAGES_LIST, key="s_lang_1")
         
         st.markdown("---")
-        st.markdown("📸 **फोटो या कैमरा:**")
-        uploaded_image = st.file_uploader("गैलरी से फोटो अपलोड करें", type=["jpg", "png", "jpeg"])
+        st.markdown("📸 **एक से अधिक फोटो अपलोड करें:**")
+        uploaded_images = st.file_uploader("गैलरी से कई फोटो चुनें", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
+        
         use_camera = st.checkbox("📸 कैमरा चालू करें")
         camera_image = st.camera_input("कैमरा", key="cam_widget") if use_camera else None
 
@@ -117,37 +118,37 @@ with tab1:
         
         student_query = st.text_area("या अपना सवाल लिखकर यहाँ बताएं:", height=100, placeholder="उदाहरण: प्रकाश संश्लेषण क्या है?")
         
-        active_image = camera_image if camera_image is not None else uploaded_image
-        
         if st.button("🔍 तुरंत हल देखें", key="btn_solve"):
             if not api_keys_pool:
                 st.error("⚠️ कृपया Streamlit Secrets में GEMINI_KEYS सेट करें!")
-            elif not student_query.strip() and active_image is None and audio_file is None:
-                st.warning("⚠️ कृपया कुछ लिखें, बोलें या फोटो अपलोड करें!")
+            elif not student_query.strip() and not uploaded_images and camera_image is None and audio_file is None:
+                st.warning("⚠️ कृपया कुछ लिखें, बोलें या कम से कम एक फोटो अपलोड करें!")
             else:
-                with st.spinner("⚡ AI आपकी आवाज, फोटो और सवाल का समाधान तैयार कर रहा है (रॉकेट स्पीड)..."):
+                with st.spinner("⚡ AI आपकी फोटो, आवाज और सवाल का समाधान तैयार कर रहा है (रॉकेट स्पीड)..."):
                     prompt_text = f"""
                     Expert tutor for {stu_class} studying {stu_subject}.
                     Language Medium: {stu_lang}. (If Bilingual, provide explanation in both Hindi and English). No raw LaTeX or dollar signs. Use clean text.
-                    Query/Context: {student_query if student_query.strip() else "Solve the question provided in audio or image."}
+                    Query/Context: {student_query if student_query.strip() else "Solve the questions/content provided in the attached images or audio."}
                     Provide clear steps and explanation.
                     """
                     
                     contents_to_send = [prompt_text]
                     
-                    # अगर फोटो है तो जोड़ें
-                    if active_image is not None:
-                        img = Image.open(active_image)
-                        contents_to_send.append(img)
+                    # अगर एक या एक से अधिक फोटो हैं तो सभी को जोड़ें
+                    if uploaded_images:
+                        for img_file in uploaded_images:
+                            contents_to_send.append(Image.open(img_file))
+                            
+                    if camera_image is not None:
+                        contents_to_send.append(Image.open(camera_image))
                         
-                    # अगर आवाज रिकॉर्ड की गई है तो उसे सुरक्षित रूप से फाइल के रूप में भेजें
+                    # अगर आवाज रिकॉर्ड की गई है
                     if audio_file is not None:
                         audio_bytes = audio_file.read()
                         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
                             tmp.write(audio_bytes)
                             tmp_path = tmp.name
                         
-                        # वर्तमान सक्रिय की से क्लाइंट बनाकर ऑडियो फाइल अपलोड करें
                         current_key = next(key_cycler)
                         client = genai.Client(api_key=current_key)
                         uploaded_audio_ref = client.files.upload(file=tmp_path)
