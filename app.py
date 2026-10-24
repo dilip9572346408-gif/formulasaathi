@@ -48,25 +48,21 @@ def get_api_keys():
     if "GEMINI_KEYS" in st.secrets:
         keys = list(st.secrets["GEMINI_KEYS"])
     elif "GEMINI_API_KEY" in st.secrets:
-        keys = [st.gemini_api_key] if hasattr(st, 'gemini_api_key') else [st.secrets["GEMINI_API_KEY"]]
+        keys = [st.secrets["GEMINI_API_KEY"]]
     return keys
 
 api_keys_pool = get_api_keys()
 key_cycler = itertools.cycle(api_keys_pool) if api_keys_pool else None
 
-# Session State Initialization
-if 'query_text' not in st.session_state:
-    st.session_state['query_text'] = ""
-
 with st.sidebar:
     st.header("🚀 FormulaSaathi Pro")
     st.markdown("---")
     st.markdown(f"**Loaded Keys:** {len(api_keys_pool)}")
-    st.markdown("1. Unified Voice & Text Box\n2. Auto-Retry 503 Protection\n3. Turbo Speed Caching")
+    st.markdown("1. Direct Native Audio Solver\n2. Auto-Retry 503 Protection\n3. Turbo Speed Caching")
 
 st.title("🚀 FormulaSaathi & Teacher Pro Suite")
 
-tab1, tab2, tab3 = st.tabs(["👨‍🎓 Student Zone & Solver", "👨‍🏫 Teacher A4 Paper Generator", "🎙️ Voice Assistant & Interactive Quiz"])
+tab1, tab2, tab3 = st.tabs(["👨‍🎓 Student Zone & Solver", "👨‍教师 Teacher A4 Paper Generator", "🎙️ Voice Assistant & Interactive Quiz"])
 
 # ऑटो-रीट्राई और 503 एरर हैंडलिंग वाला मजबूत जेमिनी कॉल फंक्शन
 def call_gemini(contents_list):
@@ -74,7 +70,6 @@ def call_gemini(contents_list):
         return "ERROR: No API Keys found in Streamlit Secrets!"
     
     last_error = ""
-    # 3 बार रीट्राई लूप ताकि 503 या सर्वर बिजी होने पर ऑटोमेटिक संभल जाए
     for attempt in range(3):
         for _ in range(len(api_keys_pool)):
             current_key = next(key_cycler)
@@ -89,15 +84,15 @@ def call_gemini(contents_list):
             except Exception as e:
                 last_error = str(e)
                 if "503" in last_error or "UNAVAILABLE" in last_error or "ResourceExhausted" in last_error:
-                    time.sleep(1) # सर्वर बिजी होने पर 1 सेकंड रुककर अगली की ट्राई करेगा
+                    time.sleep(1)
                 continue
     return f"API_ERROR: {last_error}"
 
 # ==========================================
-# TAB 1: STUDENT ZONE & UNIFIED INPUT SOLVER
+# TAB 1: STUDENT ZONE & UNIFIED MULTIMODAL SOLVER
 # ==========================================
 with tab1:
-    st.subheader("💡 Smart Doubt Solver (Unified Text, Photo & Voice Panel)")
+    st.subheader("💡 Smart Doubt Solver (Text, Photo & Direct Voice Audio)")
     
     col_s1, col_s2 = st.columns([1, 2])
     
@@ -113,44 +108,40 @@ with tab1:
         camera_image = st.camera_input("कैमरा", key="cam_widget") if use_camera else None
 
     with col_s2:
-        st.markdown("### ✍️ अपना सवाल दर्ज करें (बोलकर या लिखकर)")
+        st.markdown("### 🎙️ बोलकर या ✍️ लिखकर सवाल पूछें")
         
-        # वॉइस रिकॉर्डर को सीधे टेक्स्ट बॉक्स के ठीक ऊपर रखा गया है ताकि सब एक साथ दिखे
+        # सीधा ऑडियो इनपुट जो रिकॉर्डिंग को सीधे AI के पास भेजेगा
         audio_file = st.audio_input("🎙️ माइक पर बोलकर रिकॉर्ड करें (क्लिक करें)")
         
-        if audio_file is not None:
-            with st.spinner("🎙️ आवाज को टेक्स्ट में बदला जा रहा है..."):
-                audio_bytes = audio_file.read()
-                trans_prompt = "Transcribe the given audio accurately into text in Hindi or English."
-                t_res = call_gemini([trans_prompt, {"mime_type": "audio/wav", "data": audio_bytes}])
-                if t_res and not t_res.startswith("API_ERROR") and not t_res.startswith("ERROR"):
-                    st.session_state['query_text'] = t_res.strip()
-                    st.success("✅ बोलकर लिखा गया सवाल नीचे बॉक्स में आ गया है!")
-                    st.rerun()
-
-        # यूनिफाइड टेक्स्ट एरिया
-        student_query = st.text_area("सवाल यहाँ लिखें:", key="query_text", height=130, placeholder="उदाहरण: प्रकाश संश्लेषण क्या है?")
+        student_query = st.text_area("या अपना सवाल लिखकर यहाँ बताएं:", height=100, placeholder="उदाहरण: प्रकाश संश्लेषण क्या है?")
         
         active_image = camera_image if camera_image is not None else uploaded_image
         
         if st.button("🔍 तुरंत हल देखें", key="btn_solve"):
             if not api_keys_pool:
                 st.error("⚠️ कृपया Streamlit Secrets में GEMINI_KEYS सेट करें!")
-            elif not student_query.strip() and active_image is None:
-                st.warning("⚠️ कृपया कुछ लिखें, बोलें या फोटो अपलोड करें!")
+            elif not student_query.strip() and active_image is None and audio_file is None:
+                st.warning("⚠️ कृपया कुछ लिखें, बोलें (माइक से रिकॉर्ड करें) या फोटो अपलोड करें!")
             else:
-                with st.spinner("⚡ AI समाधान तैयार कर रहा है (रॉकेट स्पीड)..."):
+                with st.spinner("⚡ AI आपकी आवाज, फोटो और सवाल का समाधान तैयार कर रहा है (रॉकेट स्पीड)..."):
                     prompt_text = f"""
                     Expert tutor for {stu_class} studying {stu_subject}.
                     Language: {stu_lang}. No dollar signs ($) or raw LaTeX. Use clean text.
-                    Query/Context: {student_query if student_query.strip() else "Solve the question in the attached image."}
+                    Query/Context: {student_query if student_query.strip() else "Solve the question provided in audio or image."}
                     Provide clear steps and explanation.
                     """
                     
                     contents_to_send = [prompt_text]
+                    
+                    # अगर फोटो है तो जोड़ें
                     if active_image is not None:
                         img = Image.open(active_image)
                         contents_to_send.append(img)
+                        
+                    # अगर आवाज रिकॉर्ड की गई है तो सीधे ऑडियो बाइट्स भेजें
+                    if audio_file is not None:
+                        audio_bytes = audio_file.read()
+                        contents_to_send.append({"mime_type": "audio/wav", "data": audio_bytes})
                     
                     res_text = call_gemini(contents_to_send)
                     if res_text and not res_text.startswith("API_ERROR") and not res_text.startswith("ERROR"):
@@ -171,7 +162,7 @@ with tab1:
                         </script>
                         """, height=0)
                     else:
-                        st.error(f"⚠️ गूगल सर्वर व्यस्त है। कृपया एक सेकंड बाद फिर से क्लिक करें: {res_text}")
+                        st.error(f"⚠️ गूगल सर्वर से एरर आया है: {res_text}")
 
 # ==========================================
 # TAB 2: TEACHER A4 QUESTION PAPER GENERATOR
