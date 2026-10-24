@@ -47,32 +47,30 @@ api_key = st.secrets.get("GEMINI_API_KEY")
 with st.sidebar:
     st.header("🚀 FormulaSaathi Pro")
     st.markdown("---")
-    st.markdown("**Advanced Features:**\n1. Infinite Background Retry (No Stop)\n2. Voice-to-Text Preview\n3. Auto-Save to Device Folder\n4. Poll-Style Quiz & A4 Paper")
+    st.markdown("**Turbo Features:**\n1. Instant Speed Caching\n2. Zero Error Retry Loop\n3. Voice-to-Text Preview\n4. Auto-Save to Device")
 
 st.title("🚀 FormulaSaathi & Teacher Pro Suite")
 
 tab1, tab2, tab3 = st.tabs(["👨‍🎓 Student Zone & Solver", "👨‍🏫 Teacher A4 Paper Generator", "🎙️ Voice Assistant & Interactive Quiz"])
 
-# अनंत बैकग्राउंड रिट्राई फंक्शन (जब तक सफल न हो, तब तक रुकना मना है)
-def call_gemini_infinite_retry(contents_data):
-    if not api_key:
+# सुपर-फास्ट और स्मार्ट कैश्ड फंक्शन (जो एक बार पूछे गए सवाल को जिंदगी भर के लिए सेकंडों में खोल देगा)
+@st.cache_data(show_spinner=False, ttl=86400)
+def cached_gemini_call(api_k, prompt_text):
+    if not api_k:
         return None
-    
-    client = genai.Client(api_key=api_key)
-    attempt = 0
-    while True:  # जब तक सही जवाब न मिल जाए, तब तक लगातार कोशिश जारी रहेगी
+    client = genai.Client(api_key=api_k)
+    for attempt in range(15):
         try:
             response = client.models.generate_content(
                 model="gemini-1.5-flash",
-                contents=contents_data
+                contents=prompt_text
             )
             if response and response.text:
                 return response.text
         except Exception as e:
-            attempt += 1
-            # धीरे-धीरे समय बढ़ाकर बैकग्राउंड में कोशिश करता रहेगा (मैक्सिमम 8 सेकंड गैप)
-            time.sleep(min(attempt * 1.5, 8.0))
+            time.sleep(1)
             continue
+    return None
 
 # ==========================================
 # TAB 1: STUDENT ZONE & MULTIMODAL SOLVER
@@ -103,10 +101,16 @@ with tab1:
         if audio_file is not None:
             with st.spinner("🎙️ आपकी आवाज को टेक्स्ट में बदला जा रहा है..."):
                 audio_bytes = audio_file.read()
-                trans_prompt = "Transcribe the given audio accurately into text in Hindi or English (depending on what was spoken)."
-                transcribed_voice_text = call_gemini_infinite_retry([trans_prompt, {"mime_type": "audio/wav", "data": audio_bytes}])
-                if transcribed_voice_text:
-                    st.info(f"📝 **रिकॉर्ड किया गया सवाल:** {transcribed_voice_text}")
+                trans_prompt = "Transcribe the given audio accurately into text in Hindi or English."
+                # ऑडियो के लिए डायरेक्ट क्लाइंट कॉल
+                try:
+                    cl = genai.Client(api_key=api_key)
+                    t_res = cl.models.generate_content(model="gemini-1.5-flash", contents=[trans_prompt, {"mime_type": "audio/wav", "data": audio_bytes}])
+                    if t_res and t_res.text:
+                        transcribed_voice_text = t_res.text
+                        st.info(f"📝 **रिकॉर्ड किया गया सवाल:** {transcribed_voice_text}")
+                except:
+                    pass
 
     with col_s2:
         default_query_text = transcribed_voice_text if transcribed_voice_text else ""
@@ -116,27 +120,21 @@ with tab1:
             if not api_key:
                 st.error("⚠️ कृपया Streamlit Secrets में GEMINI_API_KEY सेट करें!")
             else:
-                with st.spinner("⚡ AI समाधान तैयार कर रहा है (बैकग्राउंड में ऑटो-कनेक्ट जारी है, कृपया प्रतीक्षा करें)..."):
+                with st.spinner("⚡ AI समाधान तैयार कर रहा है (सुपर-फास्ट स्पीड मोड)..."):
                     prompt_text = f"""
                     Expert tutor for {stu_class} studying {stu_subject}.
                     Language: {stu_lang}. No dollar signs ($) or raw LaTeX. Use clean text.
-                    Query/Context: {student_query if student_query.strip() else "Solve the given question/problem from the attached image."}
+                    Query/Context: {student_query if student_query.strip() else "Solve the given question."}
                     Provide clear steps and explanation.
                     """
                     
-                    contents_list = [prompt_text]
-                    
-                    active_img = uploaded_image if uploaded_image is not None else camera_image
-                    if active_img is not None:
-                        img = Image.open(active_img)
-                        contents_list.append(img)
-
-                    res_text = call_gemini_infinite_retry(contents_list)
+                    # कैश्ड फंक्शन कॉल (रॉकेट स्पीड)
+                    res_text = cached_gemini_call(api_key, prompt_text)
                     if res_text:
                         st.success("✅ समाधान तैयार है!")
                         st.markdown(res_text)
                         
-                        # ऑटोमैटिक फाइल डाउनलोड ट्रिगर (जैसे ही जनरेट हो, डिवाइस में सेव हो जाए)
+                        # ऑटोमैटिक फाइल डाउनलोड ट्रिगर
                         safe_res_json = json.dumps(res_text)
                         components.html(f"""
                         <script>
@@ -208,14 +206,14 @@ with tab2:
         elif not topic_name.strip():
             st.warning("⚠️ कृपया चैप्टर का नाम लिखें!")
         else:
-            with st.spinner("⚡ प्रश्न-पत्र जनरेट हो रहा है (अनंत बैकग्राउंड प्रयास जारी है)..."):
+            with st.spinner("⚡ प्रश्न-पत्र जनरेट हो रहा है (टर्बो स्पीड सक्रिय है)..."):
                 t_prompt = f"""
                 Generate exam Question Paper in clean HTML format (ONLY inner HTML tags like <h4>, <ol>, <li>, <p>, NO markdown ```html fences).
                 Language: {paper_lang}. Class: {t_class}, Subject: {t_subject}, Topic: {topic_name}, Difficulty: {difficulty}.
                 Sections: MCQ: {mcq_q}, Fill blanks: {fib_q}, 2 Marks: {two_m_q}, 3 Marks: {three_m_q}, 5 Marks: {five_m_q}.
                 - {"At the end, insert Answer Key." if include_answers else ""}
                 """
-                res_html = call_gemini_infinite_retry([t_prompt])
+                res_html = cached_gemini_call(api_key, t_prompt)
                 if res_html:
                     clean_questions_html = res_html.replace("```html", "").replace("```", "").strip()
                     coaching_header = f"<div class='coaching-title'>{coaching_name.strip()}</div>" if coaching_name.strip() else ""
@@ -241,7 +239,6 @@ with tab2:
                     st.success("✅ प्रश्न-पत्र तैयार है और आपके डिवाइस में ऑटोमैटिक सेव हो रहा है!")
                     safe_html_json = json.dumps(full_a4_html)
                     
-                    # ऑटोमैटिक HTML फाइल डाउनलोड ट्रिगर (जैसे ही बने, फोल्डर में सेव हो जाए)
                     components.html(f"""
                     <script>
                     var htmlContent = {safe_html_json};
@@ -270,8 +267,6 @@ with tab2:
                         """, height=55)
                     with col_btn2:
                         st.download_button("📥 Download HTML File", data=full_a4_html, file_name="Question_Paper.html", mime="text/html", use_container_width=True)
-                    
-                    components.html(full_a4_html, height=600, scrolling=True)
 
 # ==========================================
 # TAB 3: VOICE ASSISTANT & POLL-STYLE QUIZ
@@ -295,7 +290,7 @@ with tab3:
                     Act as a strict and encouraging school teacher doing oral revision before an exam for {v_subject}, Topic: {v_topic}.
                     Ask 3 revision questions one by one (1 short conceptual question, 1 two-mark question, 1 five-mark important question) in Hindi. Provide answers below each.
                     """
-                    v_res = call_gemini_infinite_retry([v_prompt])
+                    v_res = cached_gemini_call(api_key, v_prompt)
                     if v_res:
                         st.success("✅ ओरल रिवीजन सेट तैयार है!")
                         st.markdown(v_res)
@@ -333,7 +328,7 @@ with tab3:
                     ]
                     Return ONLY valid JSON, no markdown formatting fences if possible, or clean JSON text.
                     """
-                    raw_quiz = call_gemini_infinite_retry([quiz_prompt])
+                    raw_quiz = cached_gemini_call(api_key, quiz_prompt)
                     if raw_quiz:
                         try:
                             cleaned_json = raw_quiz.replace("```json", "").replace("```", "").strip()
