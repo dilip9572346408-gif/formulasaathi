@@ -1,6 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 from google import genai
+from PIL import Image
 import json
 import time
 
@@ -46,14 +47,14 @@ api_key = st.secrets.get("GEMINI_API_KEY")
 with st.sidebar:
     st.header("🚀 FormulaSaathi Pro")
     st.markdown("---")
-    st.markdown("**Advanced Features:**\n1. Heavy Background Auto-Retry\n2. Infinite MCQ Practice\n3. Voice Assistant Revision\n4. A4 Paper Generator")
+    st.markdown("**Advanced Features:**\n1. Camera & Gallery Photo Solver\n2. Voice Input (Audio Recording)\n3. Poll-Style Interactive Quiz\n4. A4 Question Paper Generator")
 
 st.title("🚀 FormulaSaathi & Teacher Pro Suite")
 
-tab1, tab2, tab3 = st.tabs(["👨‍🎓 Student Zone & MCQs", "👨‍🏫 Teacher A4 Paper Generator", "🎙️ Voice Assistant & Oral Revision"])
+tab1, tab2, tab3 = st.tabs(["👨‍🎓 Student Zone & Solver", "👨‍🏫 Teacher A4 Paper Generator", "🎙️ Voice Assistant & Interactive Quiz"])
 
-# हेवी बैकग्राउंड ऑटो-रिट्राई फंक्शन (जो 12-15 बार चुपचाप कोशिश करेगा)
-def call_gemini_heavy_retry(prompt_text):
+# हेवी बैकग्राउंड ऑटो-रिट्राई फंक्शन (मल्टीमॉडल और टेक्स्ट दोनों के लिए)
+def call_gemini_multimodal(contents_data):
     if not api_key:
         return None
     
@@ -62,80 +63,70 @@ def call_gemini_heavy_retry(prompt_text):
         try:
             response = client.models.generate_content(
                 model="gemini-1.5-flash",
-                contents=prompt_text
+                contents=contents_data
             )
             if response and response.text:
                 return response.text
         except Exception as e:
-            time.sleep(1.2)  # थोड़ा रुककर फिर से प्रयास करेगा
+            time.sleep(1.2)
             continue
     return None
 
 # ==========================================
-# TAB 1: STUDENT ZONE & INFINITE MCQS
+# TAB 1: STUDENT ZONE & MULTIMODAL SOLVER
 # ==========================================
 with tab1:
-    st.subheader("💡 Smart Doubt Solver & Infinite MCQ Practice")
+    st.subheader("💡 Smart Doubt Solver (Text, Photo & Voice Input)")
     
-    sub_tab1, sub_tab2 = st.tabs(["🔍 Doubt & Numerical Solver", "🎯 Infinite MCQ Practice Generator"])
-    
-    with sub_tab1:
-        col_s1, col_s2 = st.columns([1, 2])
-        with col_s1:
-            stu_class = st.selectbox("कक्षा चुनें", CLASSES_LIST, key="s_class_1")
-            stu_subject = st.selectbox("विषय चुनें", ALL_SUBJECTS, key="s_sub_1")
-            stu_lang = st.radio("माध्यम चुनें", LANGUAGES_LIST, key="s_lang_1")
+    col_s1, col_s2 = st.columns([1, 2])
+    with col_s1:
+        stu_class = st.selectbox("कक्षा चुनें", CLASSES_LIST, key="s_class_1")
+        stu_subject = st.selectbox("विषय चुनें", ALL_SUBJECTS, key="s_sub_1")
+        stu_lang = st.radio("माध्यम चुनें", LANGUAGES_LIST, key="s_lang_1")
         
-        with col_s2:
-            student_query = st.text_area("अपना सवाल या चैप्टर यहाँ लिखें:", height=140, placeholder="उदाहरण: गति के नियमों को समझाएं...")
+        st.markdown("---")
+        st.markdown("📸 **या फोटो से सवाल पूछें:**")
+        uploaded_image = st.file_uploader("गैलरी से फोटो अपलोड करें", type=["jpg", "png", "jpeg"])
+        camera_image = st.camera_input("या कैमरे से फोटो खींचें")
+        
+        st.markdown("---")
+        st.markdown("🎙️ **या बोलकर सवाल रिकॉर्ड करें:**")
+        audio_file = st.audio_input("माइक पर बोलकर रिकॉर्ड करें")
+
+    with col_s2:
+        student_query = st.text_area("अपना सवाल या चैप्टर यहाँ लिखकर पूछें:", height=140, placeholder="उदाहरण: गति के नियमों को समझाएं या समीकरण हल करें...")
         
         if st.button("🔍 तुरंत हल देखें", key="btn_solve"):
             if not api_key:
                 st.error("⚠️ कृपया Streamlit Secrets में GEMINI_API_KEY सेट करें!")
-            elif not student_query.strip():
-                st.warning("⚠️ कृपया अपना सवाल लिखें।")
             else:
                 with st.spinner("⚡ AI समाधान तैयार कर रहा है (हेवी ऑटो-कनेक्ट जारी है)..."):
-                    prompt = f"""
+                    prompt_text = f"""
                     Expert tutor for {stu_class} studying {stu_subject}.
                     Language: {stu_lang}. No dollar signs ($) or raw LaTeX. Use clean text.
-                    Query: {student_query}. Provide clear steps.
+                    Query/Context: {student_query if student_query.strip() else "Solve the given question/problem from the attached image or audio."}
+                    Provide clear steps and explanation.
                     """
-                    res_text = call_gemini_heavy_retry(prompt)
+                    
+                    contents_list = [prompt_text]
+                    
+                    # अगर फोटो अपलोड या कैप्चर की गई है
+                    active_img = uploaded_image if uploaded_image is not None else camera_image
+                    if active_img is not None:
+                        img = Image.open(active_img)
+                        contents_list.append(img)
+                    
+                    # अगर ऑडियो रिकॉर्ड किया गया है
+                    if audio_file is not None:
+                        audio_bytes = audio_file.read()
+                        contents_list.append({"mime_type": "audio/wav", "data": audio_bytes})
+
+                    res_text = call_gemini_multimodal(contents_list)
                     if res_text:
                         st.success("✅ समाधान तैयार है!")
                         st.markdown(res_text)
                     else:
                         st.warning("⚠️ सर्वर अत्यधिक व्यस्त है। कृपया पुनः प्रयास करें।")
-
-    with sub_tab2:
-        st.markdown("### 🎯 इनफाइनाइट बहुविकल्पीय प्रश्न (MCQ) प्रैक्टिस")
-        mcq_col1, mcq_col2, mcq_col3 = st.columns(3)
-        with mcq_col1:
-            mcq_class = st.selectbox("कक्षा चुनें", CLASSES_LIST, key="mcq_cls")
-        with mcq_col2:
-            mcq_subject = st.selectbox("विषय चुनें", ALL_SUBJECTS, key="mcq_sub")
-        with mcq_col3:
-            mcq_count = st.slider("प्रश्नों की संख्या चुनें", min_value=5, max_value=30, value=10)
-        
-        mcq_topic = st.text_input("चैप्टर या टॉपिक का नाम लिखें:", placeholder="जैसे: प्रकाश का परावर्तन (Reflection of Light)")
-        
-        if st.button("🚀 इनफाइनाइट MCQs जनरेट करें"):
-            if not mcq_topic.strip():
-                st.warning("⚠️ कृपया चैप्टर या टॉपिक का नाम लिखें!")
-            else:
-                with st.spinner("⚡ इनफाइनाइट MCQs तैयार हो रहे हैं..."):
-                    mcq_prompt = f"""
-                    Generate {mcq_count} multiple-choice questions (MCQs) for {mcq_class} student studying {mcq_subject}, Topic: {mcq_topic}.
-                    Format each question cleanly with options (A, B, C, D) and provide an Answer Key at the end.
-                    Language: Hindi. No LaTeX or dollar signs.
-                    """
-                    mcq_result = call_gemini_heavy_retry(mcq_prompt)
-                    if mcq_result:
-                        st.success("✅ आपके प्रैक्टिस MCQs तैयार हैं!")
-                        st.markdown(mcq_result)
-                    else:
-                        st.warning("⚠️ सर्वर व्यस्त है। कृपया पुनः प्रयास करें।")
 
 # ==========================================
 # TAB 2: TEACHER A4 QUESTION PAPER GENERATOR
@@ -199,7 +190,7 @@ with tab2:
                 Sections: MCQ: {mcq_q}, Fill blanks: {fib_q}, 2 Marks: {two_m_q}, 3 Marks: {three_m_q}, 5 Marks: {five_m_q}.
                 - {"At the end, insert Answer Key." if include_answers else ""}
                 """
-                res_html = call_gemini_heavy_retry(t_prompt)
+                res_html = call_gemini_multimodal([t_prompt])
                 if res_html:
                     clean_questions_html = res_html.replace("```html", "").replace("```", "").strip()
                     coaching_header = f"<div class='coaching-title'>{coaching_name.strip()}</div>" if coaching_name.strip() else ""
@@ -244,40 +235,89 @@ with tab2:
                     components.html(full_a4_html, height=600, scrolling=True)
 
 # ==========================================
-# TAB 3: VOICE ASSISTANT & ORAL REVISION
+# TAB 3: VOICE ASSISTANT & POLL-STYLE QUIZ
 # ==========================================
 with tab3:
-    st.subheader("🎙️ Voice Assistant & Oral Revision (मौखिक रिवीजन)")
-    st.markdown("यहाँ से आप वॉइस असिस्टेंट की मदद से मौखिक रूप से सवाल पूछ सकते हैं और रिवीजन कर सकते हैं।")
+    st.subheader("🎙️ Voice Assistant & Bilingual Poll-Style Quiz (ओरल और पोल क्विज़)")
     
-    v_subject = st.selectbox("विषय चुनें", ALL_SUBJECTS, key="v_sub")
-    v_topic = st.text_input("रिवीजन के लिए टॉपिक लिखें:", placeholder="जैसे: गुरुत्वाकर्षण (Gravitation)")
+    quiz_tab1, quiz_tab2 = st.tabs(["🗣️ Oral Revision & Audio Assistant", "📊 Poll-Style MCQ Quiz (बilingual)"])
     
-    if st.button("🗣️ मौखिक रिवीजन प्रश्न पूछें"):
-        if not v_topic.strip():
-            st.warning("⚠️ कृपया टॉपिक का नाम लिखें!")
-        else:
-            with st.spinner("⚡ ओरल रिवीजन प्रश्न तैयार हो रहे हैं..."):
-                v_prompt = f"""
-                Act as a strict and encouraging school teacher doing oral revision before an exam for {v_subject}, Topic: {v_topic}.
-                Ask 3 revision questions one by one (1 short conceptual question, 1 two-mark question, 1 five-mark important question) in Hindi. Provide answers below each.
-                """
-                v_res = call_gemini_heavy_retry(v_prompt)
-                if v_res:
-                    st.success("✅ ओरल रिवीजन सेट तैयार है!")
-                    st.markdown(v_res)
-                    
-                    # ब्राउज़र का स्पीच सिंथेसिस (बोलने की खूबी) जो ऐप को बोलकर सुनाएगा
-                    speech_text = v_res.replace('"', '').replace('\n', ' ')
-                    components.html(f"""
-                    <button onclick="speakText()" style="background:#34a853;color:white;padding:10px 18px;font-size:15px;font-weight:bold;border:none;border-radius:6px;cursor:pointer;width:100%;">🔊 ऑडियो सुनें (Listen Aloud)</button>
-                    <script>
-                    function speakText() {{
-                        var msg = new SpeechSynthesisUtterance("{speech_text[:500]}");
-                        msg.lang = 'hi-IN';
-                        window.speechSynthesis.speak(msg);
-                    }}
-                    </script>
-                    """, height=60)
-                else:
-                    st.warning("⚠️ सर्वर व्यस्त है। कृपया पुनः प्रयास करें।")
+    with quiz_tab1:
+        st.markdown("### मौखिक रिवीजन (Oral Exam Revision)")
+        v_subject = st.selectbox("विषय चुनें", ALL_SUBJECTS, key="v_sub")
+        v_topic = st.text_input("रिवीजन के लिए टॉपिक लिखें:", placeholder="जैसे: गुरुत्वाकर्षण (Gravitation)")
+        
+        if st.button("🗣️ मौखिक रिवीजन प्रश्न पूछें"):
+            if not v_topic.strip():
+                st.warning("⚠️ कृपया टॉपिक का नाम लिखें!")
+            else:
+                with st.spinner("⚡ ओरल रिवीजन सेट तैयार हो रहा है..."):
+                    v_prompt = f"""
+                    Act as a strict and encouraging school teacher doing oral revision before an exam for {v_subject}, Topic: {v_topic}.
+                    Ask 3 revision questions one by one (1 short conceptual question, 1 two-mark question, 1 five-mark important question) in Hindi. Provide answers below each.
+                    """
+                    v_res = call_gemini_multimodal([v_prompt])
+                    if v_res:
+                        st.success("✅ ओरल रिवीजन सेट तैयार है!")
+                        st.markdown(v_res)
+                        
+                        speech_text = v_res.replace('"', '').replace('\n', ' ')
+                        components.html(f"""
+                        <button onclick="speakText()" style="background:#34a853;color:white;padding:10px 18px;font-size:15px;font-weight:bold;border:none;border-radius:6px;cursor:pointer;width:100%;">🔊 ऑडियो सुनें (Listen Aloud)</button>
+                        <script>
+                        function speakText() {{
+                            var msg = new SpeechSynthesisUtterance("{speech_text[:500]}");
+                            msg.lang = 'hi-IN';
+                            window.speechSynthesis.speak(msg);
+                        }}
+                        </script>
+                        """, height=60)
+                    else:
+                        st.warning("⚠️ सर्वर व्यस्त है। कृपया पुनः प्रयास करें।")
+
+    with quiz_tab2:
+        st.markdown("### 📊 पोल-टाइप इंटरैक्टिव क्विज़ (Interactive MCQ Poll)")
+        pq_class = st.selectbox("कक्षा चुनें", CLASSES_LIST, key="pq_cls")
+        pq_subject = st.selectbox("विषय चुनें", ALL_SUBJECTS, key="pq_sub")
+        pq_lang = st.selectbox("माध्यम चुनें", ["Hindi (हिंदी)", "English (अंग्रेजी)", "Bilingual (हिन्दी + English)"], key="pq_lang")
+        pq_topic = st.text_input("क्विज़ के लिए चैप्टर/टॉपिक लिखें:", placeholder="जैसे: विद्युत धारा (Electric Current)", key="pq_top")
+        
+        if st.button("🚀 क्विज़ शुरू करें"):
+            if not pq_topic.strip():
+                st.warning("⚠️ कृपया टॉपिक का नाम लिखें!")
+            else:
+                with st.spinner("⚡ इंटरैक्टिव क्विज़ जनरेट हो रहा है..."):
+                    quiz_prompt = f"""
+                    Generate 5 multiple-choice questions (MCQs) for {pq_class}, Subject: {pq_subject}, Topic: {pq_topic}.
+                    Language Medium: {pq_lang}.
+                    Provide output in a strict JSON format list of objects:
+                    [
+                      {{"question": "...", "options": ["A) ...", "B) ...", "C) ...", "D) ..."], "answer": "A", "explanation": "..."}}
+                    ]
+                    Return ONLY valid JSON, no markdown formatting fences if possible, or clean JSON text.
+                    """
+                    raw_quiz = call_gemini_multimodal([quiz_prompt])
+                    if raw_quiz:
+                        try:
+                            cleaned_json = raw_quiz.replace("```json", "").replace("```", "").strip()
+                            quiz_data = json.loads(cleaned_json)
+                            st.session_state['quiz_data'] = quiz_data
+                            st.success("✅ क्विज़ तैयार है! नीचे पोल में जवाब दें:")
+                        except:
+                            st.markdown(raw_quiz)
+                    else:
+                        st.warning("⚠️ सर्वर व्यस्त है। कृपया पुनः प्रयास करें।")
+
+        if 'quiz_data' in st.session_state:
+            score = 0
+            for i, q in enumerate(st.session_state['quiz_data']):
+                st.markdown(f"**Q{i+1}: {q.get('question', '')}**")
+                user_choice = st.radio(f"विकल्प चुनें (Select Option) Q{i+1}", q.get('options', []), key=f"q_{i}")
+                
+                if st.button(f"उत्तर जाँचें Q{i+1}", key=f"check_{i}"):
+                    correct_opt = q.get('answer', '')
+                    if user_choice and user_choice.startswith(correct_opt):
+                        st.success(f"🎉 बिल्कुल सही! स्पष्टीकरण: {q.get('explanation', '')}")
+                    else:
+                        st.warning(f"❌ गलत! सही उत्तर ऑप्शन {correct_opt} है। स्पष्टीकरण: {q.get('explanation', '')}")
+                st.markdown("---")
