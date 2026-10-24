@@ -3,7 +3,6 @@ import streamlit.components.v1 as components
 from google import genai
 from PIL import Image
 import json
-import time
 import itertools
 
 # पेज सेटअप
@@ -54,18 +53,22 @@ def get_api_keys():
 api_keys_pool = get_api_keys()
 key_cycler = itertools.cycle(api_keys_pool) if api_keys_pool else None
 
+# Session State Initialization for Query Box
+if 'query_text' not in st.session_state:
+    st.session_state['query_text'] = ""
+
 with st.sidebar:
     st.header("🚀 FormulaSaathi Pro")
     st.markdown("---")
     st.markdown(f"**Loaded Keys:** {len(api_keys_pool)}")
+    st.markdown("1. Instant Voice Sync\n2. Real Multimodal Photo Solver\n3. Turbo A4 & Quiz Speed")
 
 st.title("🚀 FormulaSaathi & Teacher Pro Suite")
 
 tab1, tab2, tab3 = st.tabs(["👨‍🎓 Student Zone & Solver", "👨‍🏫 Teacher A4 Paper Generator", "🎙️ Voice Assistant & Interactive Quiz"])
 
-# सुपर-फास्ट कैश्ड फंक्शन (अपडेटेड gemini-3.8-flash मॉडल के साथ)
-@st.cache_data(show_spinner=False, ttl=86400)
-def cached_gemini_call(prompt_text):
+# सुपर-फास्ट और सुरक्षित जेमिनी कॉल फंक्शन (जो टेक्स्ट, इमेज और ऑडियो सब संभालता है)
+def call_gemini(contents_list):
     if not api_keys_pool:
         return "ERROR: No API Keys found in Streamlit Secrets!"
     
@@ -76,7 +79,7 @@ def cached_gemini_call(prompt_text):
             client = genai.Client(api_key=current_key)
             response = client.models.generate_content(
                 model="gemini-3.8-flash",
-                contents=prompt_text
+                contents=contents_list
             )
             if response and response.text:
                 return response.text
@@ -110,38 +113,42 @@ with tab1:
         st.markdown("🎙️ **बोलकर सवाल रिकॉर्ड करें:**")
         audio_file = st.audio_input("माइक पर बोलकर रिकॉर्ड करें")
         
-        transcribed_voice_text = ""
         if audio_file is not None:
-            with st.spinner("🎙️ आवाज को टेक्स्ट में बदला जा रहा है..."):
+            with st.spinner("🎙️ आपकी आवाज को टेक्स्ट में बदला जा रहा है..."):
                 audio_bytes = audio_file.read()
                 trans_prompt = "Transcribe the given audio accurately into text in Hindi or English."
-                try:
-                    if api_keys_pool:
-                        cl = genai.Client(api_key=next(key_cycler))
-                        t_res = cl.models.generate_content(model="gemini-3.8-flash", contents=[trans_prompt, {"mime_type": "audio/wav", "data": audio_bytes}])
-                        if t_res and t_res.text:
-                            transcribed_voice_text = t_res.text
-                            st.info(f"📝 {transcribed_voice_text}")
-                except:
-                    pass
+                t_res = call_gemini([trans_prompt, {"mime_type": "audio/wav", "data": audio_bytes}])
+                if t_res and not t_res.startswith("API_ERROR") and not t_res.startswith("ERROR"):
+                    st.session_state['query_text'] = t_res.strip()
+                    st.success("✅ आवाज सफलतापर्वक टेक्स्ट में बदल गई!")
+                    st.rerun()
 
     with col_s2:
-        default_query_text = transcribed_voice_text if transcribed_voice_text else ""
-        student_query = st.text_area("अपना सवाल या चैप्टर यहाँ लिखें:", value=default_query_text, height=140, placeholder="उदाहरण: गति के नियमों को समझाएं...")
+        # सीधे session_state से जुड़ा हुआ टेक्स्ट एरिया
+        student_query = st.text_area("अपना सवाल या चैप्टर यहाँ लिखें (या ऊपर बोलकर रिकॉर्ड करें):", key="query_text", height=140, placeholder="उदाहरण: गति के नियमों को समझाएं...")
+        
+        active_image = camera_image if camera_image is not None else uploaded_image
         
         if st.button("🔍 तुरंत हल देखें", key="btn_solve"):
             if not api_keys_pool:
                 st.error("⚠️ कृपया Streamlit Secrets में GEMINI_KEYS सेट करें!")
+            elif not student_query.strip() and active_image is None:
+                st.warning("⚠️ कृपया सवाल लिखें या फोटो अपलोड करें!")
             else:
-                with st.spinner("⚡ AI समाधान तैयार कर रहा है..."):
+                with st.spinner("⚡ AI समाधान तैयार कर रहा है (रॉकेट स्पीड)..."):
                     prompt_text = f"""
                     Expert tutor for {stu_class} studying {stu_subject}.
                     Language: {stu_lang}. No dollar signs ($) or raw LaTeX. Use clean text.
-                    Query/Context: {student_query if student_query.strip() else "Solve the given question."}
+                    Query/Context: {student_query if student_query.strip() else "Solve the question in the attached image."}
                     Provide clear steps and explanation.
                     """
                     
-                    res_text = cached_gemini_call(prompt_text)
+                    contents_to_send = [prompt_text]
+                    if active_image is not None:
+                        img = Image.open(active_image)
+                        contents_to_send.append(img)
+                    
+                    res_text = call_gemini(contents_to_send)
                     if res_text and not res_text.startswith("API_ERROR") and not res_text.startswith("ERROR"):
                         st.success("✅ समाधान तैयार है!")
                         st.markdown(res_text)
@@ -224,7 +231,7 @@ with tab2:
                 Sections: MCQ: {mcq_q}, Fill blanks: {fib_q}, 2 Marks: {two_m_q}, 3 Marks: {three_m_q}, 5 Marks: {five_m_q}.
                 - {"At the end, insert Answer Key." if include_answers else ""}
                 """
-                res_html = cached_gemini_call(t_prompt)
+                res_html = call_gemini([t_prompt])
                 if res_html and not res_html.startswith("API_ERROR") and not res_html.startswith("ERROR"):
                     clean_questions_html = res_html.replace("```html", "").replace("```", "").strip()
                     coaching_header = f"<div class='coaching-title'>{coaching_name.strip()}</div>" if coaching_name.strip() else ""
@@ -291,19 +298,20 @@ with tab3:
     
     with quiz_tab1:
         st.markdown("### मौखिक रिवीजन (Oral Exam Revision)")
+        v_class = st.selectbox("कक्षा चुनें", CLASSES_LIST, key="v_cls")
         v_subject = st.selectbox("विषय चुनें", ALL_SUBJECTS, key="v_sub")
-        v_topic = st.text_input("रिवीजन के लिए टॉपिक लिखें:", placeholder="जैसे: गुरुत्वाकर्षण (Gravitation)")
+        v_topic = st.text_input("रिवीजन के लिए टॉपिक लिखें:", placeholder="जैसे: गुरुत्वाकर्षण (Gravitation)", key="v_top_input")
         
-        if st.button("🗣️ मौखिक रिवीजन प्रश्न पूछें"):
+        if st.button("🗣️ मौखिक रिवीजन प्रश्न पूछें", key="btn_oral"):
             if not v_topic.strip():
                 st.warning("⚠️ कृपया टॉपिक का नाम लिखें!")
             else:
                 with st.spinner("⚡ ओरल रिवीजन सेट तैयार हो रहा है..."):
                     v_prompt = f"""
-                    Act as a strict and encouraging school teacher doing oral revision before an exam for {v_subject}, Topic: {v_topic}.
+                    Act as a strict and encouraging school teacher doing oral revision before an exam for {v_class}, Subject: {v_subject}, Topic: {v_topic}.
                     Ask 3 revision questions one by one (1 short conceptual question, 1 two-mark question, 1 five-mark important question) in Hindi. Provide answers below each.
                     """
-                    v_res = cached_gemini_call(v_prompt)
+                    v_res = call_gemini([v_prompt])
                     if v_res and not v_res.startswith("API_ERROR") and not v_res.startswith("ERROR"):
                         st.success("✅ ओरल रिवीजन सेट तैयार है!")
                         st.markdown(v_res)
@@ -329,28 +337,28 @@ with tab3:
         pq_lang = st.selectbox("माध्यम चुनें", ["Hindi (हिंदी)", "English (अंग्रेजी)", "Bilingual (हिन्दी + English)"], key="pq_lang")
         pq_topic = st.text_input("क्विज़ के लिए चैप्टर/टॉपिक लिखें:", placeholder="जैसे: विद्युत धारा (Electric Current)", key="pq_top")
         
-        if st.button("🚀 क्विज़ शुरू करें"):
+        if st.button("🚀 क्विज़ शुरू करें", key="btn_quiz_start"):
             if not pq_topic.strip():
                 st.warning("⚠️ कृपया टॉपिक का नाम लिखें!")
             else:
-                with st.spinner("⚡ इंटरैक्टिव क्विज़ जनरेट हो रहा है..."):
+                with st.spinner("⚡ इंटरैक्टिव क्विज़ जनरेट हो रहा है (टर्बो स्पीड)..."):
                     quiz_prompt = f"""
-                    Generate 5 multiple-choice questions (MCQs) for {pq_class}, Subject: {pq_subject}, Topic: {pq_topic}.
+                    Generate exactly 5 multiple-choice questions (MCQs) for {pq_class}, Subject: {pq_subject}, Topic: {pq_topic}.
                     Language Medium: {pq_lang}.
-                    Provide output in a strict JSON format list of objects:
+                    Provide output in a strict JSON format list of objects and nothing else:
                     [
                       {{"question": "...", "options": ["A) ...", "B) ...", "C) ...", "D) ..."], "answer": "A", "explanation": "..."}}
                     ]
-                    Return ONLY valid JSON, no markdown formatting fences if possible, or clean JSON text.
                     """
-                    raw_quiz = cached_gemini_call(quiz_prompt)
+                    raw_quiz = call_gemini([quiz_prompt])
                     if raw_quiz and not raw_quiz.startswith("API_ERROR") and not raw_quiz.startswith("ERROR"):
                         try:
                             cleaned_json = raw_quiz.replace("```json", "").replace("```", "").strip()
                             quiz_data = json.loads(cleaned_json)
                             st.session_state['quiz_data'] = quiz_data
                             st.success("✅ क्विज़ तैयार है! नीचे पोल में जवाब दें:")
-                        except:
+                        except Exception as e:
+                            st.error(f"⚠️ JSON पार्सिंग में समस्या: {e}")
                             st.markdown(raw_quiz)
                     else:
                         st.error(f"⚠️ एरर: {raw_quiz}")
