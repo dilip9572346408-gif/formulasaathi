@@ -4,6 +4,7 @@ from google import genai
 from PIL import Image
 import json
 import time
+import tempfile
 import itertools
 
 # पेज सेटअप
@@ -59,7 +60,7 @@ with st.sidebar:
     st.header("🚀 FormulaSaathi Pro")
     st.markdown("---")
     st.markdown(f"**Loaded Keys:** {len(api_keys_pool)}")
-    st.markdown("1. Bilingual Support Everywhere\n2. 503 Auto-Retry Protection\n3. Turbo Speed Caching")
+    st.markdown("1. Native Audio Mic Support\n2. Bilingual Everywhere\n3. 503 Auto-Retry Protection")
 
 st.title("🚀 FormulaSaathi & Teacher Pro Suite")
 
@@ -93,7 +94,7 @@ def call_gemini(contents_list):
 # TAB 1: STUDENT ZONE & MULTIMODAL SOLVER
 # ==========================================
 with tab1:
-    st.subheader("💡 Smart Doubt Solver (Text & Photo Multimodal)")
+    st.subheader("💡 Smart Doubt Solver (Text, Photo & Live Voice Mic)")
     
     col_s1, col_s2 = st.columns([1, 2])
     
@@ -109,29 +110,48 @@ with tab1:
         camera_image = st.camera_input("कैमरा", key="cam_widget") if use_camera else None
 
     with col_s2:
-        st.markdown("### ✍️ अपना सवाल या चैप्टर यहाँ लिखें")
-        student_query = st.text_area("सवाल यहाँ लिखें:", height=140, placeholder="उदाहरण: प्रकाश संश्लेषण क्या है? Explain Photosynthesis.")
+        st.markdown("### 🎙️ बोलकर पूछें (Voice Mic) या ✍️ लिखकर बताएं")
+        
+        # वॉइस रिकॉर्डर (माइक बटन)
+        audio_file = st.audio_input("🎙️ माइक पर बोलकर रिकॉर्ड करें (क्लिक करें)")
+        
+        student_query = st.text_area("या अपना सवाल लिखकर यहाँ बताएं:", height=100, placeholder="उदाहरण: प्रकाश संश्लेषण क्या है?")
         
         active_image = camera_image if camera_image is not None else uploaded_image
         
         if st.button("🔍 तुरंत हल देखें", key="btn_solve"):
             if not api_keys_pool:
                 st.error("⚠️ कृपया Streamlit Secrets में GEMINI_KEYS सेट करें!")
-            elif not student_query.strip() and active_image is None:
-                st.warning("⚠️ कृपया कुछ लिखें या फोटो अपलोड करें!")
+            elif not student_query.strip() and active_image is None and audio_file is None:
+                st.warning("⚠️ कृपया कुछ लिखें, बोलें या फोटो अपलोड करें!")
             else:
-                with st.spinner("⚡ AI समाधान तैयार कर रहा है (रॉकेट स्पीड)..."):
+                with st.spinner("⚡ AI आपकी आवाज, फोटो और सवाल का समाधान तैयार कर रहा है (रॉकेट स्पीड)..."):
                     prompt_text = f"""
                     Expert tutor for {stu_class} studying {stu_subject}.
-                    Language Medium: {stu_lang}. Provide content clearly matching this language preference (Bilingual means both Hindi and English explanation). No raw LaTeX or dollar signs.
-                    Query/Context: {student_query if student_query.strip() else "Solve the question in the attached image."}
+                    Language Medium: {stu_lang}. (If Bilingual, provide explanation in both Hindi and English). No raw LaTeX or dollar signs. Use clean text.
+                    Query/Context: {student_query if student_query.strip() else "Solve the question provided in audio or image."}
                     Provide clear steps and explanation.
                     """
                     
                     contents_to_send = [prompt_text]
+                    
+                    # अगर फोटो है तो जोड़ें
                     if active_image is not None:
                         img = Image.open(active_image)
                         contents_to_send.append(img)
+                        
+                    # अगर आवाज रिकॉर्ड की गई है तो उसे सुरक्षित रूप से फाइल के रूप में भेजें
+                    if audio_file is not None:
+                        audio_bytes = audio_file.read()
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+                            tmp.write(audio_bytes)
+                            tmp_path = tmp.name
+                        
+                        # वर्तमान सक्रिय की से क्लाइंट बनाकर ऑडियो फाइल अपलोड करें
+                        current_key = next(key_cycler)
+                        client = genai.Client(api_key=current_key)
+                        uploaded_audio_ref = client.files.upload(file=tmp_path)
+                        contents_to_send.append(uploaded_audio_ref)
                     
                     res_text = call_gemini(contents_to_send)
                     if res_text and not res_text.startswith("API_ERROR") and not res_text.startswith("ERROR"):
@@ -295,7 +315,7 @@ with tab3:
                 with st.spinner("⚡ ओरल रिवीजन सेट तैयार हो रहा है (रॉकेट स्पीड)..."):
                     v_prompt = f"""
                     Act as a strict and encouraging school teacher doing oral revision before an exam for {v_class}, Subject: {v_subject}, Topic: {v_topic}.
-                    Language Medium: {v_lang}.
+                    Language Medium: {v_lang}. (If Bilingual, ask questions in both Hindi and English).
                     Ask 3 revision questions one by one (1 short conceptual question, 1 two-mark question, 1 five-mark important question). Provide answers below each.
                     """
                     v_res = call_gemini([v_prompt])
