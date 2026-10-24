@@ -47,19 +47,19 @@ api_key = st.secrets.get("GEMINI_API_KEY")
 with st.sidebar:
     st.header("🚀 FormulaSaathi Pro")
     st.markdown("---")
-    st.markdown("**Advanced Features:**\n1. Camera & Gallery Photo Solver\n2. Voice Input (Audio Recording)\n3. Poll-Style Interactive Quiz\n4. A4 Question Paper Generator")
+    st.markdown("**Advanced Features:**\n1. Camera Reset Button Added\n2. Smart Exponential Retry\n3. Infinite MCQ Poll Quiz\n4. Voice & Oral Revision")
 
 st.title("🚀 FormulaSaathi & Teacher Pro Suite")
 
 tab1, tab2, tab3 = st.tabs(["👨‍🎓 Student Zone & Solver", "👨‍🏫 Teacher A4 Paper Generator", "🎙️ Voice Assistant & Interactive Quiz"])
 
-# हेवी बैकग्राउंड ऑटो-रिट्राई फंक्शन (मल्टीमॉडल और टेक्स्ट दोनों के लिए)
-def call_gemini_multimodal(contents_data):
+# स्मार्ट और सुरक्षित बैकग्राउंड रिट्राई फंक्शन (लंबे अंतराल के साथ ताकि लिमिट पार न हो)
+def call_gemini_smart_retry(contents_data):
     if not api_key:
         return None
     
     client = genai.Client(api_key=api_key)
-    for attempt in range(15):  # 15 बार तक बैकग्राउंड में कोशिश करेगा
+    for attempt in range(8):  # 8 स्मार्ट प्रयास
         try:
             response = client.models.generate_content(
                 model="gemini-1.5-flash",
@@ -68,7 +68,8 @@ def call_gemini_multimodal(contents_data):
             if response and response.text:
                 return response.text
         except Exception as e:
-            time.sleep(1.2)
+            # धीरे-धीरे समय बढ़ाकर कोशिश करेगा (2s, 4s, 6s...)
+            time.sleep((attempt + 1) * 2.0)
             continue
     return None
 
@@ -87,7 +88,13 @@ with tab1:
         st.markdown("---")
         st.markdown("📸 **या फोटो से सवाल पूछें:**")
         uploaded_image = st.file_uploader("गैलरी से फोटो अपलोड करें", type=["jpg", "png", "jpeg"])
-        camera_image = st.camera_input("या कैमरे से फोटो खींचें")
+        
+        # कैमरा इनपुट और रीसेट करने का बटन
+        camera_image = st.camera_input("या कैमरे से फोटो खींचें", key="cam_widget")
+        if st.button("🗑️ कैमरा बंद करें / फोटो रीसेट करें"):
+            if "cam_widget" in st.session_state:
+                del st.session_state["cam_widget"]
+                st.rerun()
         
         st.markdown("---")
         st.markdown("🎙️ **या बोलकर सवाल रिकॉर्ड करें:**")
@@ -100,7 +107,7 @@ with tab1:
             if not api_key:
                 st.error("⚠️ कृपया Streamlit Secrets में GEMINI_API_KEY सेट करें!")
             else:
-                with st.spinner("⚡ AI समाधान तैयार कर रहा है (हेवी ऑटो-कनेक्ट जारी है)..."):
+                with st.spinner("⚡ AI समाधान तैयार कर रहा है (स्मार्ट बैकग्राउंड कनेक्ट जारी है)..."):
                     prompt_text = f"""
                     Expert tutor for {stu_class} studying {stu_subject}.
                     Language: {stu_lang}. No dollar signs ($) or raw LaTeX. Use clean text.
@@ -110,23 +117,21 @@ with tab1:
                     
                     contents_list = [prompt_text]
                     
-                    # अगर फोटो अपलोड या कैप्चर की गई है
                     active_img = uploaded_image if uploaded_image is not None else camera_image
                     if active_img is not None:
                         img = Image.open(active_img)
                         contents_list.append(img)
                     
-                    # अगर ऑडियो रिकॉर्ड किया गया है
                     if audio_file is not None:
                         audio_bytes = audio_file.read()
                         contents_list.append({"mime_type": "audio/wav", "data": audio_bytes})
 
-                    res_text = call_gemini_multimodal(contents_list)
+                    res_text = call_gemini_smart_retry(contents_list)
                     if res_text:
                         st.success("✅ समाधान तैयार है!")
                         st.markdown(res_text)
                     else:
-                        st.warning("⚠️ सर्वर अत्यधिक व्यस्त है। कृपया पुनः प्रयास करें।")
+                        st.warning("⚠️ सर्वर अभी बहुत व्यस्त है। कृपया 5 सेकंड रुककर दोबारा क्लिक करें।")
 
 # ==========================================
 # TAB 2: TEACHER A4 QUESTION PAPER GENERATOR
@@ -190,7 +195,7 @@ with tab2:
                 Sections: MCQ: {mcq_q}, Fill blanks: {fib_q}, 2 Marks: {two_m_q}, 3 Marks: {three_m_q}, 5 Marks: {five_m_q}.
                 - {"At the end, insert Answer Key." if include_answers else ""}
                 """
-                res_html = call_gemini_multimodal([t_prompt])
+                res_html = call_gemini_smart_retry([t_prompt])
                 if res_html:
                     clean_questions_html = res_html.replace("```html", "").replace("```", "").strip()
                     coaching_header = f"<div class='coaching-title'>{coaching_name.strip()}</div>" if coaching_name.strip() else ""
@@ -238,9 +243,9 @@ with tab2:
 # TAB 3: VOICE ASSISTANT & POLL-STYLE QUIZ
 # ==========================================
 with tab3:
-    st.subheader("🎙️ Voice Assistant & Bilingual Poll-Style Quiz (ओरल और पोल क्विज़)")
+    st.subheader("🎙️ Voice Assistant & Bilingual Poll-Style Quiz")
     
-    quiz_tab1, quiz_tab2 = st.tabs(["🗣️ Oral Revision & Audio Assistant", "📊 Poll-Style MCQ Quiz (बilingual)"])
+    quiz_tab1, quiz_tab2 = st.tabs(["🗣️ Oral Revision & Audio Assistant", "📊 Poll-Style MCQ Quiz (Bilingual)"])
     
     with quiz_tab1:
         st.markdown("### मौखिक रिवीजन (Oral Exam Revision)")
@@ -256,7 +261,7 @@ with tab3:
                     Act as a strict and encouraging school teacher doing oral revision before an exam for {v_subject}, Topic: {v_topic}.
                     Ask 3 revision questions one by one (1 short conceptual question, 1 two-mark question, 1 five-mark important question) in Hindi. Provide answers below each.
                     """
-                    v_res = call_gemini_multimodal([v_prompt])
+                    v_res = call_gemini_smart_retry([v_prompt])
                     if v_res:
                         st.success("✅ ओरल रिवीजन सेट तैयार है!")
                         st.markdown(v_res)
@@ -296,7 +301,7 @@ with tab3:
                     ]
                     Return ONLY valid JSON, no markdown formatting fences if possible, or clean JSON text.
                     """
-                    raw_quiz = call_gemini_multimodal([quiz_prompt])
+                    raw_quiz = call_gemini_smart_retry([quiz_prompt])
                     if raw_quiz:
                         try:
                             cleaned_json = raw_quiz.replace("```json", "").replace("```", "").strip()
@@ -309,10 +314,9 @@ with tab3:
                         st.warning("⚠️ सर्वर व्यस्त है। कृपया पुनः प्रयास करें।")
 
         if 'quiz_data' in st.session_state:
-            score = 0
             for i, q in enumerate(st.session_state['quiz_data']):
                 st.markdown(f"**Q{i+1}: {q.get('question', '')}**")
-                user_choice = st.radio(f"विकल्प चुनें (Select Option) Q{i+1}", q.get('options', []), key=f"q_{i}")
+                user_choice = st.radio(f"विकल्प चुनें Q{i+1}", q.get('options', []), key=f"q_{i}")
                 
                 if st.button(f"उत्तर जाँचें Q{i+1}", key=f"check_{i}"):
                     correct_opt = q.get('answer', '')
