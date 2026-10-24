@@ -38,8 +38,9 @@ CLASSES_LIST = [
 ]
 
 LANGUAGES_LIST = [
-    "English (फुल्ली इंग्लिश मीडियम)", 
-    "Hindi (फुल्ली हिंदी मीडियम)"
+    "Bilingual (हिन्दी + English दोनों)",
+    "Hindi (फुल्ली हिंदी मीडियम)",
+    "English (फुल्ली इंग्लिश मीडियम)"
 ]
 
 # मल्टीपल API Keys को मैनेज करने का सिस्टम
@@ -58,11 +59,11 @@ with st.sidebar:
     st.header("🚀 FormulaSaathi Pro")
     st.markdown("---")
     st.markdown(f"**Loaded Keys:** {len(api_keys_pool)}")
-    st.markdown("1. Direct Native Audio Solver\n2. Auto-Retry 503 Protection\n3. Turbo Speed Caching")
+    st.markdown("1. Bilingual Support Everywhere\n2. 503 Auto-Retry Protection\n3. Turbo Speed Caching")
 
 st.title("🚀 FormulaSaathi & Teacher Pro Suite")
 
-tab1, tab2, tab3 = st.tabs(["👨‍🎓 Student Zone & Solver", "👨‍教师 Teacher A4 Paper Generator", "🎙️ Voice Assistant & Interactive Quiz"])
+tab1, tab2, tab3 = st.tabs(["👨‍🎓 Student Zone & Solver", "👨‍🏫 Teacher A4 Paper Generator", "🎙️ Voice Assistant & Interactive Quiz"])
 
 # ऑटो-रीट्राई और 503 एरर हैंडलिंग वाला मजबूत जेमिनी कॉल फंक्शन
 def call_gemini(contents_list):
@@ -89,17 +90,17 @@ def call_gemini(contents_list):
     return f"API_ERROR: {last_error}"
 
 # ==========================================
-# TAB 1: STUDENT ZONE & UNIFIED MULTIMODAL SOLVER
+# TAB 1: STUDENT ZONE & MULTIMODAL SOLVER
 # ==========================================
 with tab1:
-    st.subheader("💡 Smart Doubt Solver (Text, Photo & Direct Voice Audio)")
+    st.subheader("💡 Smart Doubt Solver (Text & Photo Multimodal)")
     
     col_s1, col_s2 = st.columns([1, 2])
     
     with col_s1:
         stu_class = st.selectbox("कक्षा चुनें", CLASSES_LIST, key="s_class_1")
         stu_subject = st.selectbox("विषय चुनें", ALL_SUBJECTS, key="s_sub_1")
-        stu_lang = st.radio("माध्यम चुनें", LANGUAGES_LIST, key="s_lang_1")
+        stu_lang = st.selectbox("माध्यम चुनें", LANGUAGES_LIST, key="s_lang_1")
         
         st.markdown("---")
         st.markdown("📸 **फोटो या कैमरा:**")
@@ -108,40 +109,29 @@ with tab1:
         camera_image = st.camera_input("कैमरा", key="cam_widget") if use_camera else None
 
     with col_s2:
-        st.markdown("### 🎙️ बोलकर या ✍️ लिखकर सवाल पूछें")
-        
-        # सीधा ऑडियो इनपुट जो रिकॉर्डिंग को सीधे AI के पास भेजेगा
-        audio_file = st.audio_input("🎙️ माइक पर बोलकर रिकॉर्ड करें (क्लिक करें)")
-        
-        student_query = st.text_area("या अपना सवाल लिखकर यहाँ बताएं:", height=100, placeholder="उदाहरण: प्रकाश संश्लेषण क्या है?")
+        st.markdown("### ✍️ अपना सवाल या चैप्टर यहाँ लिखें")
+        student_query = st.text_area("सवाल यहाँ लिखें:", height=140, placeholder="उदाहरण: प्रकाश संश्लेषण क्या है? Explain Photosynthesis.")
         
         active_image = camera_image if camera_image is not None else uploaded_image
         
         if st.button("🔍 तुरंत हल देखें", key="btn_solve"):
             if not api_keys_pool:
                 st.error("⚠️ कृपया Streamlit Secrets में GEMINI_KEYS सेट करें!")
-            elif not student_query.strip() and active_image is None and audio_file is None:
-                st.warning("⚠️ कृपया कुछ लिखें, बोलें (माइक से रिकॉर्ड करें) या फोटो अपलोड करें!")
+            elif not student_query.strip() and active_image is None:
+                st.warning("⚠️ कृपया कुछ लिखें या फोटो अपलोड करें!")
             else:
-                with st.spinner("⚡ AI आपकी आवाज, फोटो और सवाल का समाधान तैयार कर रहा है (रॉकेट स्पीड)..."):
+                with st.spinner("⚡ AI समाधान तैयार कर रहा है (रॉकेट स्पीड)..."):
                     prompt_text = f"""
                     Expert tutor for {stu_class} studying {stu_subject}.
-                    Language: {stu_lang}. No dollar signs ($) or raw LaTeX. Use clean text.
-                    Query/Context: {student_query if student_query.strip() else "Solve the question provided in audio or image."}
+                    Language Medium: {stu_lang}. Provide content clearly matching this language preference (Bilingual means both Hindi and English explanation). No raw LaTeX or dollar signs.
+                    Query/Context: {student_query if student_query.strip() else "Solve the question in the attached image."}
                     Provide clear steps and explanation.
                     """
                     
                     contents_to_send = [prompt_text]
-                    
-                    # अगर फोटो है तो जोड़ें
                     if active_image is not None:
                         img = Image.open(active_image)
                         contents_to_send.append(img)
-                        
-                    # अगर आवाज रिकॉर्ड की गई है तो सीधे ऑडियो बाइट्स भेजें
-                    if audio_file is not None:
-                        audio_bytes = audio_file.read()
-                        contents_to_send.append({"mime_type": "audio/wav", "data": audio_bytes})
                     
                     res_text = call_gemini(contents_to_send)
                     if res_text and not res_text.startswith("API_ERROR") and not res_text.startswith("ERROR"):
@@ -168,7 +158,7 @@ with tab1:
 # TAB 2: TEACHER A4 QUESTION PAPER GENERATOR
 # ==========================================
 with tab2:
-    st.subheader("📄 सुपर-फास्ट A4 क्वेश्चन पेपर जनरेटर")
+    st.subheader("📄 सुपर-फास्ट A4 क्वेश्चन पेपर जनरेटर (Bilingual Supported)")
     
     c1, c2, c3, c4 = st.columns(4)
     with c1:
@@ -219,10 +209,10 @@ with tab2:
         elif not topic_name.strip():
             st.warning("⚠️ कृपया चैप्टर का नाम लिखें!")
         else:
-            with st.spinner("⚡ प्रश्न-पत्र जनरेट हो रहा है..."):
+            with st.spinner("⚡ प्रश्न-पत्र जनरेट हो रहा है (टर्बो स्पीड)..."):
                 t_prompt = f"""
                 Generate exam Question Paper in clean HTML format (ONLY inner HTML tags like <h4>, <ol>, <li>, <p>, NO markdown ```html fences).
-                Language: {paper_lang}. Class: {t_class}, Subject: {t_subject}, Topic: {topic_name}, Difficulty: {difficulty}.
+                Language Medium: {paper_lang}. (If Bilingual, provide questions in both Hindi and English). Class: {t_class}, Subject: {t_subject}, Topic: {topic_name}, Difficulty: {difficulty}.
                 Sections: MCQ: {mcq_q}, Fill blanks: {fib_q}, 2 Marks: {two_m_q}, 3 Marks: {three_m_q}, 5 Marks: {five_m_q}.
                 - {"At the end, insert Answer Key." if include_answers else ""}
                 """
@@ -295,16 +285,18 @@ with tab3:
         st.markdown("### मौखिक रिवीजन (Oral Exam Revision)")
         v_class = st.selectbox("कक्षा चुनें", CLASSES_LIST, key="v_cls")
         v_subject = st.selectbox("विषय चुनें", ALL_SUBJECTS, key="v_sub")
+        v_lang = st.selectbox("माध्यम चुनें", LANGUAGES_LIST, key="v_lang_oral")
         v_topic = st.text_input("रिवीजन के लिए टॉपिक लिखें:", placeholder="जैसे: गुरुत्वाकर्षण (Gravitation)", key="v_top_input")
         
         if st.button("🗣️ मौखिक रिवीजन प्रश्न पूछें", key="btn_oral"):
             if not v_topic.strip():
                 st.warning("⚠️ कृपया टॉपिक का नाम लिखें!")
             else:
-                with st.spinner("⚡ ओरल रिवीजन सेट तैयार हो रहा है..."):
+                with st.spinner("⚡ ओरल रिवीजन सेट तैयार हो रहा है (रॉकेट स्पीड)..."):
                     v_prompt = f"""
                     Act as a strict and encouraging school teacher doing oral revision before an exam for {v_class}, Subject: {v_subject}, Topic: {v_topic}.
-                    Ask 3 revision questions one by one (1 short conceptual question, 1 two-mark question, 1 five-mark important question) in Hindi. Provide answers below each.
+                    Language Medium: {v_lang}.
+                    Ask 3 revision questions one by one (1 short conceptual question, 1 two-mark question, 1 five-mark important question). Provide answers below each.
                     """
                     v_res = call_gemini([v_prompt])
                     if v_res and not v_res.startswith("API_ERROR") and not v_res.startswith("ERROR"):
@@ -329,7 +321,7 @@ with tab3:
         st.markdown("### 📊 पोल-टाइप इंटरैक्टिव क्विज़ (Interactive MCQ Poll)")
         pq_class = st.selectbox("कक्षा चुनें", CLASSES_LIST, key="pq_cls")
         pq_subject = st.selectbox("विषय चुनें", ALL_SUBJECTS, key="pq_sub")
-        pq_lang = st.selectbox("माध्यम चुनें", ["Hindi (हिंदी)", "English (अंग्रेजी)", "Bilingual (हिन्दी + English)"], key="pq_lang")
+        pq_lang = st.selectbox("माध्यम चुनें", LANGUAGES_LIST, key="pq_lang")
         pq_topic = st.text_input("क्विज़ के लिए चैप्टर/टॉपिक लिखें:", placeholder="जैसे: विद्युत धारा (Electric Current)", key="pq_top")
         
         if st.button("🚀 क्विज़ शुरू करें", key="btn_quiz_start"):
@@ -339,7 +331,7 @@ with tab3:
                 with st.spinner("⚡ इंटरैक्टिव क्विज़ जनरेट हो रहा है (टर्बो स्पीड)..."):
                     quiz_prompt = f"""
                     Generate exactly 5 multiple-choice questions (MCQs) for {pq_class}, Subject: {pq_subject}, Topic: {pq_topic}.
-                    Language Medium: {pq_lang}.
+                    Language Medium: {pq_lang}. (If Bilingual, write each question and options in both Hindi and English).
                     Provide output in a strict JSON format list of objects and nothing else:
                     [
                       {{"question": "...", "options": ["A) ...", "B) ...", "C) ...", "D) ..."], "answer": "A", "explanation": "..."}}
