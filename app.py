@@ -47,19 +47,20 @@ api_key = st.secrets.get("GEMINI_API_KEY")
 with st.sidebar:
     st.header("🚀 FormulaSaathi Pro")
     st.markdown("---")
-    st.markdown("**Advanced Features:**\n1. Toggle Camera On/Off Fix\n2. Smart Exponential Retry\n3. Infinite MCQ Poll Quiz\n4. Voice & Oral Revision")
+    st.markdown("**Advanced Features:**\n1. Infinite Background Retry (No Stop)\n2. Voice-to-Text Preview\n3. Auto-Save to Device Folder\n4. Poll-Style Quiz & A4 Paper")
 
 st.title("🚀 FormulaSaathi & Teacher Pro Suite")
 
 tab1, tab2, tab3 = st.tabs(["👨‍🎓 Student Zone & Solver", "👨‍🏫 Teacher A4 Paper Generator", "🎙️ Voice Assistant & Interactive Quiz"])
 
-# स्मार्ट और सुरक्षित बैकग्राउंड रिट्राई फंक्शन
-def call_gemini_smart_retry(contents_data):
+# अनंत बैकग्राउंड रिट्राई फंक्शन (जब तक सफल न हो, तब तक रुकना मना है)
+def call_gemini_infinite_retry(contents_data):
     if not api_key:
         return None
     
     client = genai.Client(api_key=api_key)
-    for attempt in range(8):
+    attempt = 0
+    while True:  # जब तक सही जवाब न मिल जाए, तब तक लगातार कोशिश जारी रहेगी
         try:
             response = client.models.generate_content(
                 model="gemini-1.5-flash",
@@ -68,9 +69,10 @@ def call_gemini_smart_retry(contents_data):
             if response and response.text:
                 return response.text
         except Exception as e:
-            time.sleep((attempt + 1) * 2.0)
+            attempt += 1
+            # धीरे-धीरे समय बढ़ाकर बैकग्राउंड में कोशिश करता रहेगा (मैक्सिमम 8 सेकंड गैप)
+            time.sleep(min(attempt * 1.5, 8.0))
             continue
-    return None
 
 # ==========================================
 # TAB 1: STUDENT ZONE & MULTIMODAL SOLVER
@@ -88,28 +90,37 @@ with tab1:
         st.markdown("📸 **फोटो से सवाल पूछें:**")
         uploaded_image = st.file_uploader("गैलरी से फोटो अपलोड करें", type=["jpg", "png", "jpeg"])
         
-        # टॉगल/चैकबॉक्स जिससे कैमरा पूरी तरह खुले और बंद हो सके
         use_camera = st.checkbox("📸 कैमरा चालू करें / बंद करें (Toggle Camera)")
         camera_image = None
         if use_camera:
             camera_image = st.camera_input("कैमरे के सामने सवाल रखें और फोटो खींचें", key="cam_widget")
         
         st.markdown("---")
-        st.markdown("🎙️ **या बोलकर सवाल रिकॉर्ड करें:**")
+        st.markdown("🎙️ **बोलकर सवाल रिकॉर्ड करें (Voice-to-Text):**")
         audio_file = st.audio_input("माइक पर बोलकर रिकॉर्ड करें")
+        
+        transcribed_voice_text = ""
+        if audio_file is not None:
+            with st.spinner("🎙️ आपकी आवाज को टेक्स्ट में बदला जा रहा है..."):
+                audio_bytes = audio_file.read()
+                trans_prompt = "Transcribe the given audio accurately into text in Hindi or English (depending on what was spoken)."
+                transcribed_voice_text = call_gemini_infinite_retry([trans_prompt, {"mime_type": "audio/wav", "data": audio_bytes}])
+                if transcribed_voice_text:
+                    st.info(f"📝 **रिकॉर्ड किया गया सवाल:** {transcribed_voice_text}")
 
     with col_s2:
-        student_query = st.text_area("अपना सवाल या चैप्टर यहाँ लिखकर पूछें:", height=140, placeholder="उदाहरण: गति के नियमों को समझाएं या समीकरण हल करें...")
+        default_query_text = transcribed_voice_text if transcribed_voice_text else ""
+        student_query = st.text_area("अपना सवाल या चैप्टर यहाँ लिखें (या ऊपर बोलकर रिकॉर्ड करें):", value=default_query_text, height=140, placeholder="उदाहरण: गति के नियमों को समझाएं...")
         
         if st.button("🔍 तुरंत हल देखें", key="btn_solve"):
             if not api_key:
                 st.error("⚠️ कृपया Streamlit Secrets में GEMINI_API_KEY सेट करें!")
             else:
-                with st.spinner("⚡ AI समाधान तैयार कर रहा है (स्मार्ट बैकग्राउंड कनेक्ट जारी है)..."):
+                with st.spinner("⚡ AI समाधान तैयार कर रहा है (बैकग्राउंड में ऑटो-कनेक्ट जारी है, कृपया प्रतीक्षा करें)..."):
                     prompt_text = f"""
                     Expert tutor for {stu_class} studying {stu_subject}.
                     Language: {stu_lang}. No dollar signs ($) or raw LaTeX. Use clean text.
-                    Query/Context: {student_query if student_query.strip() else "Solve the given question/problem from the attached image or audio."}
+                    Query/Context: {student_query if student_query.strip() else "Solve the given question/problem from the attached image."}
                     Provide clear steps and explanation.
                     """
                     
@@ -119,23 +130,34 @@ with tab1:
                     if active_img is not None:
                         img = Image.open(active_img)
                         contents_list.append(img)
-                    
-                    if audio_file is not None:
-                        audio_bytes = audio_file.read()
-                        contents_list.append({"mime_type": "audio/wav", "data": audio_bytes})
 
-                    res_text = call_gemini_smart_retry(contents_list)
+                    res_text = call_gemini_infinite_retry(contents_list)
                     if res_text:
                         st.success("✅ समाधान तैयार है!")
                         st.markdown(res_text)
+                        
+                        # ऑटोमैटिक फाइल डाउनलोड ट्रिगर (जैसे ही जनरेट हो, डिवाइस में सेव हो जाए)
+                        safe_res_json = json.dumps(res_text)
+                        components.html(f"""
+                        <script>
+                        var textData = {safe_res_json};
+                        var blob = new Blob([textData], {{ type: 'text/markdown' }});
+                        var link = document.createElement('a');
+                        link.href = window.URL.createObjectURL(blob);
+                        link.download = 'FormulaSaathi_Solution.md';
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        </script>
+                        """, height=0)
                     else:
-                        st.warning("⚠️ सर्वर अभी बहुत व्यस्त है। कृपया 5 सेकंड रुककर दोबारा क्लिक करें।")
+                        st.error("⚠️ सर्वर से कनेक्ट करने में असमर्थ।")
 
 # ==========================================
 # TAB 2: TEACHER A4 QUESTION PAPER GENERATOR
 # ==========================================
 with tab2:
-    st.subheader("📄 सुपर-फास्ट A4 क्वेश्चन पेपर जनरेटर")
+    st.subheader("📄 सुपर-फास्ट A4 क्वेश्चन पेपर जनरेटर (Auto-Save)")
     
     c1, c2, c3, c4 = st.columns(4)
     with c1:
@@ -186,14 +208,14 @@ with tab2:
         elif not topic_name.strip():
             st.warning("⚠️ कृपया चैप्टर का नाम लिखें!")
         else:
-            with st.spinner("⚡ प्रश्न-पत्र जनरेट हो रहा है..."):
+            with st.spinner("⚡ प्रश्न-पत्र जनरेट हो रहा है (अनंत बैकग्राउंड प्रयास जारी है)..."):
                 t_prompt = f"""
                 Generate exam Question Paper in clean HTML format (ONLY inner HTML tags like <h4>, <ol>, <li>, <p>, NO markdown ```html fences).
                 Language: {paper_lang}. Class: {t_class}, Subject: {t_subject}, Topic: {topic_name}, Difficulty: {difficulty}.
                 Sections: MCQ: {mcq_q}, Fill blanks: {fib_q}, 2 Marks: {two_m_q}, 3 Marks: {three_m_q}, 5 Marks: {five_m_q}.
                 - {"At the end, insert Answer Key." if include_answers else ""}
                 """
-                res_html = call_gemini_smart_retry([t_prompt])
+                res_html = call_gemini_infinite_retry([t_prompt])
                 if res_html:
                     clean_questions_html = res_html.replace("```html", "").replace("```", "").strip()
                     coaching_header = f"<div class='coaching-title'>{coaching_name.strip()}</div>" if coaching_name.strip() else ""
@@ -216,9 +238,23 @@ with tab2:
     {clean_questions_html}
 </body>
 </html>"""
-                    st.success("✅ प्रश्न-पत्र तैयार है!")
+                    st.success("✅ प्रश्न-पत्र तैयार है और आपके डिवाइस में ऑटोमैटिक सेव हो रहा है!")
                     safe_html_json = json.dumps(full_a4_html)
                     
+                    # ऑटोमैटिक HTML फाइल डाउनलोड ट्रिगर (जैसे ही बने, फोल्डर में सेव हो जाए)
+                    components.html(f"""
+                    <script>
+                    var htmlContent = {safe_html_json};
+                    var blob = new Blob([htmlContent], {{ type: 'text/html' }});
+                    var link = document.createElement('a');
+                    link.href = window.URL.createObjectURL(blob);
+                    link.download = 'Question_Paper_{t_class.replace(" ", "_")}.html';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    </script>
+                    """, height=0)
+
                     col_btn1, col_btn2 = st.columns(2)
                     with col_btn1:
                         components.html(f"""
@@ -259,7 +295,7 @@ with tab3:
                     Act as a strict and encouraging school teacher doing oral revision before an exam for {v_subject}, Topic: {v_topic}.
                     Ask 3 revision questions one by one (1 short conceptual question, 1 two-mark question, 1 five-mark important question) in Hindi. Provide answers below each.
                     """
-                    v_res = call_gemini_smart_retry([v_prompt])
+                    v_res = call_gemini_infinite_retry([v_prompt])
                     if v_res:
                         st.success("✅ ओरल रिवीजन सेट तैयार है!")
                         st.markdown(v_res)
@@ -275,8 +311,6 @@ with tab3:
                         }}
                         </script>
                         """, height=60)
-                    else:
-                        st.warning("⚠️ सर्वर व्यस्त है। कृपया पुनः प्रयास करें।")
 
     with quiz_tab2:
         st.markdown("### 📊 पोल-टाइप इंटरैक्टिव क्विज़ (Interactive MCQ Poll)")
@@ -299,7 +333,7 @@ with tab3:
                     ]
                     Return ONLY valid JSON, no markdown formatting fences if possible, or clean JSON text.
                     """
-                    raw_quiz = call_gemini_smart_retry([quiz_prompt])
+                    raw_quiz = call_gemini_infinite_retry([quiz_prompt])
                     if raw_quiz:
                         try:
                             cleaned_json = raw_quiz.replace("```json", "").replace("```", "").strip()
@@ -308,8 +342,6 @@ with tab3:
                             st.success("✅ क्विज़ तैयार है! नीचे पोल में जवाब दें:")
                         except:
                             st.markdown(raw_quiz)
-                    else:
-                        st.warning("⚠️ सर्वर व्यस्त है। कृपया पुनः प्रयास करें।")
 
         if 'quiz_data' in st.session_state:
             for i, q in enumerate(st.session_state['quiz_data']):
