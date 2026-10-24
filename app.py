@@ -60,7 +60,7 @@ with st.sidebar:
     st.header("🚀 FormulaSaathi Pro")
     st.markdown("---")
     st.markdown(f"**Loaded Keys:** {len(api_keys_pool)}")
-    st.markdown("1. Multi-Photo Upload Support\n2. Native Voice Audio Mic\n3. Turbo Speed & 503 Retry")
+    st.markdown("1. Unified All-in-One Input Box\n2. Multi-Photo Upload (3-4+ Images)\n3. Turbo Speed & 503 Auto-Retry")
 
 st.title("🚀 FormulaSaathi & Teacher Pro Suite")
 
@@ -72,7 +72,7 @@ def call_gemini(contents_list):
         return "ERROR: No API Keys found in Streamlit Secrets!"
     
     last_error = ""
-    for attempt in range(3):
+    for attempt in range(2):
         for _ in range(len(api_keys_pool)):
             current_key = next(key_cycler)
             try:
@@ -86,45 +86,46 @@ def call_gemini(contents_list):
             except Exception as e:
                 last_error = str(e)
                 if "503" in last_error or "UNAVAILABLE" in last_error or "ResourceExhausted" in last_error:
-                    time.sleep(0.5)
+                    time.sleep(0.3)
                 continue
     return f"API_ERROR: {last_error}"
 
 # ==========================================
-# TAB 1: STUDENT ZONE & MULTIMODAL SOLVER
+# TAB 1: STUDENT ZONE & UNIFIED CONTROL CENTER
 # ==========================================
 with tab1:
-    st.subheader("💡 Smart Doubt Solver (Multi-Photo, Text & Voice Audio)")
+    st.subheader("💡 Smart Doubt Solver (Unified Control Center)")
     
-    col_s1, col_s2 = st.columns([1, 2])
+    # साइडबार सेटिंग्स और मुख्य इनपुट एरिया को एक बेहतरीन लेआउट में देना
+    col_config, col_main = st.columns([1, 2])
     
-    with col_s1:
+    with col_config:
+        st.markdown("### ⚙️ सेटिंग")
         stu_class = st.selectbox("कक्षा चुनें", CLASSES_LIST, key="s_class_1")
         stu_subject = st.selectbox("विषय चुनें", ALL_SUBJECTS, key="s_sub_1")
         stu_lang = st.selectbox("माध्यम चुनें", LANGUAGES_LIST, key="s_lang_1")
-        
         st.markdown("---")
-        st.markdown("📸 **एक से अधिक फोटो अपलोड करें:**")
-        uploaded_images = st.file_uploader("गैलरी से कई फोटो चुनें", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
-        
-        use_camera = st.checkbox("📸 कैमरा चालू करें")
-        camera_image = st.camera_input("कैमरा", key="cam_widget") if use_camera else None
+        st.info("💡 **टिप:** आप एक साथ 3-4 फोटो चुन सकते हैं, बोल सकते हैं या टाइप कर सकते हैं!")
 
-    with col_s2:
-        st.markdown("### 🎙️ बोलकर पूछें (Voice Mic) या ✍️ लिखकर बताएं")
+    with col_main:
+        st.markdown("### 🎯 एक ही जगह पर सब कुछ (Unified Input Box)")
         
-        # वॉइस रिकॉर्डर (माइक बटन)
-        audio_file = st.audio_input("🎙️ माइक पर बोलकर रिकॉर्ड करें (क्लिक करें)")
+        # 1. टेक्स्ट बॉक्स
+        student_query = st.text_area("✍️ अपना सवाल लिखकर यहाँ बताएं:", height=90, placeholder="उदाहरण: इस समीकरण को हल करें या प्रकाश संश्लेषण समझाएं...")
         
-        student_query = st.text_area("या अपना सवाल लिखकर यहाँ बताएं:", height=100, placeholder="उदाहरण: प्रकाश संश्लेषण क्या है?")
+        # 2. एक साथ कई फोटो अपलोड करने का ऑप्शन (Multi-Photo Upload)
+        uploaded_images = st.file_uploader("📸 गैलरी से 3-4 या अधिक फोटो एक साथ चुनें", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
         
-        if st.button("🔍 तुरंत हल देखें", key="btn_solve"):
+        # 3. माइक / वॉइस रिकॉर्डर
+        audio_file = st.audio_input("🎙️ माइक पर बोलकर सवाल रिकॉर्ड करें")
+        
+        if st.button("🚀 तुरंत हल देखें (Turbo Speed)", key="btn_solve", use_container_width=True):
             if not api_keys_pool:
                 st.error("⚠️ कृपया Streamlit Secrets में GEMINI_KEYS सेट करें!")
-            elif not student_query.strip() and not uploaded_images and camera_image is None and audio_file is None:
+            elif not student_query.strip() and not uploaded_images and audio_file is None:
                 st.warning("⚠️ कृपया कुछ लिखें, बोलें या कम से कम एक फोटो अपलोड करें!")
             else:
-                with st.spinner("⚡ AI आपकी फोटो, आवाज और सवाल का समाधान तैयार कर रहा है (रॉकेट स्पीड)..."):
+                with st.spinner("⚡ AI रॉकेट स्पीड से समाधान तैयार कर रहा है..."):
                     prompt_text = f"""
                     Expert tutor for {stu_class} studying {stu_subject}.
                     Language Medium: {stu_lang}. (If Bilingual, provide explanation in both Hindi and English). No raw LaTeX or dollar signs. Use clean text.
@@ -134,14 +135,11 @@ with tab1:
                     
                     contents_to_send = [prompt_text]
                     
-                    # अगर एक या एक से अधिक फोटो हैं तो सभी को जोड़ें
+                    # अगर एक से अधिक फोटो हैं तो सभी को एक साथ जोड़ें
                     if uploaded_images:
                         for img_file in uploaded_images:
                             contents_to_send.append(Image.open(img_file))
                             
-                    if camera_image is not None:
-                        contents_to_send.append(Image.open(camera_image))
-                        
                     # अगर आवाज रिकॉर्ड की गई है
                     if audio_file is not None:
                         audio_bytes = audio_file.read()
@@ -224,7 +222,7 @@ with tab2:
     st.info(f"📊 **कुल प्रश्न: {total_questions} | कुल पूर्णांक: {calculated_marks} अंक**")
     include_answers = st.checkbox("अलग पेज पर Answer Key जोड़ें", value=True)
 
-    if st.button("✨ सुपर-फास्ट A4 क्वेश्चन पेपर तैयार करें"):
+    if st.button("✨ सुपर-फास्ट A4 क्वेश्चन पेपर तैयार करें", use_container_width=True):
         if not api_keys_pool:
             st.error("⚠️ कृपया Streamlit Secrets में GEMINI_KEYS सेट करें!")
         elif not topic_name.strip():
@@ -309,7 +307,7 @@ with tab3:
         v_lang = st.selectbox("माध्यम चुनें", LANGUAGES_LIST, key="v_lang_oral")
         v_topic = st.text_input("रिवीजन के लिए टॉपिक लिखें:", placeholder="जैसे: गुरुत्वाकर्षण (Gravitation)", key="v_top_input")
         
-        if st.button("🗣️ मौखिक रिवीजन प्रश्न पूछें", key="btn_oral"):
+        if st.button("🗣️ मौखिक रिवीजन प्रश्न पूछें", key="btn_oral", use_container_width=True):
             if not v_topic.strip():
                 st.warning("⚠️ कृपया टॉपिक का नाम लिखें!")
             else:
@@ -345,7 +343,7 @@ with tab3:
         pq_lang = st.selectbox("माध्यम चुनें", LANGUAGES_LIST, key="pq_lang")
         pq_topic = st.text_input("क्विज़ के लिए चैप्टर/टॉपिक लिखें:", placeholder="जैसे: विद्युत धारा (Electric Current)", key="pq_top")
         
-        if st.button("🚀 क्विज़ शुरू करें", key="btn_quiz_start"):
+        if st.button("🚀 क्विज़ शुरू करें", key="btn_quiz_start", use_container_width=True):
             if not pq_topic.strip():
                 st.warning("⚠️ कृपया टॉपिक का नाम लिखें!")
             else:
