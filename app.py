@@ -47,19 +47,19 @@ api_key = st.secrets.get("GEMINI_API_KEY")
 with st.sidebar:
     st.header("🚀 FormulaSaathi Pro")
     st.markdown("---")
-    st.markdown("**Advanced Features:**\n1. Camera Reset Button Added\n2. Smart Exponential Retry\n3. Infinite MCQ Poll Quiz\n4. Voice & Oral Revision")
+    st.markdown("**Advanced Features:**\n1. Toggle Camera On/Off Fix\n2. Smart Exponential Retry\n3. Infinite MCQ Poll Quiz\n4. Voice & Oral Revision")
 
 st.title("🚀 FormulaSaathi & Teacher Pro Suite")
 
 tab1, tab2, tab3 = st.tabs(["👨‍🎓 Student Zone & Solver", "👨‍🏫 Teacher A4 Paper Generator", "🎙️ Voice Assistant & Interactive Quiz"])
 
-# स्मार्ट और सुरक्षित बैकग्राउंड रिट्राई फंक्शन (लंबे अंतराल के साथ ताकि लिमिट पार न हो)
+# स्मार्ट और सुरक्षित बैकग्राउंड रिट्राई फंक्शन
 def call_gemini_smart_retry(contents_data):
     if not api_key:
         return None
     
     client = genai.Client(api_key=api_key)
-    for attempt in range(8):  # 8 स्मार्ट प्रयास
+    for attempt in range(8):
         try:
             response = client.models.generate_content(
                 model="gemini-1.5-flash",
@@ -68,7 +68,6 @@ def call_gemini_smart_retry(contents_data):
             if response and response.text:
                 return response.text
         except Exception as e:
-            # धीरे-धीरे समय बढ़ाकर कोशिश करेगा (2s, 4s, 6s...)
             time.sleep((attempt + 1) * 2.0)
             continue
     return None
@@ -86,15 +85,14 @@ with tab1:
         stu_lang = st.radio("माध्यम चुनें", LANGUAGES_LIST, key="s_lang_1")
         
         st.markdown("---")
-        st.markdown("📸 **या फोटो से सवाल पूछें:**")
+        st.markdown("📸 **फोटो से सवाल पूछें:**")
         uploaded_image = st.file_uploader("गैलरी से फोटो अपलोड करें", type=["jpg", "png", "jpeg"])
         
-        # कैमरा इनपुट और रीसेट करने का बटन
-        camera_image = st.camera_input("या कैमरे से फोटो खींचें", key="cam_widget")
-        if st.button("🗑️ कैमरा बंद करें / फोटो रीसेट करें"):
-            if "cam_widget" in st.session_state:
-                del st.session_state["cam_widget"]
-                st.rerun()
+        # टॉगल/चैकबॉक्स जिससे कैमरा पूरी तरह खुले और बंद हो सके
+        use_camera = st.checkbox("📸 कैमरा चालू करें / बंद करें (Toggle Camera)")
+        camera_image = None
+        if use_camera:
+            camera_image = st.camera_input("कैमरे के सामने सवाल रखें और फोटो खींचें", key="cam_widget")
         
         st.markdown("---")
         st.markdown("🎙️ **या बोलकर सवाल रिकॉर्ड करें:**")
