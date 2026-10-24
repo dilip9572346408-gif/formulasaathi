@@ -4,6 +4,7 @@ from google import genai
 from PIL import Image
 import json
 import time
+import itertools
 
 # पेज सेटअप
 st.set_page_config(page_title="FormulaSaathi & Teacher Pro Suite", layout="wide")
@@ -41,26 +42,40 @@ LANGUAGES_LIST = [
     "Hindi (फुल्ली हिंदी मीडियम)"
 ]
 
-# सीधे Streamlit Secrets से API Key ले लेगा
-api_key = st.secrets.get("GEMINI_API_KEY")
+# मल्टीपल API Keys को मैनेज करने का सिस्टम (Key Pooling)
+def get_api_keys():
+    keys = []
+    # 1. अगर secrets में लिस्ट दी गई है
+    if "GEMINI_KEYS" in st.secrets:
+        keys = list(st.secrets["GEMINI_KEYS"])
+    # 2. अगर पुरानी सिंगल की है तो उसे ले लो
+    elif "GEMINI_API_KEY" in st.secrets:
+        keys = [st.secrets["GEMINI_API_KEY"]]
+    return keys
+
+api_keys_pool = get_api_keys()
+key_cycler = itertools.cycle(api_keys_pool) if api_keys_pool else None
 
 with st.sidebar:
     st.header("🚀 FormulaSaathi Pro")
     st.markdown("---")
-    st.markdown("**Turbo Features:**\n1. Instant Speed Caching\n2. Zero Error Retry Loop\n3. Voice-to-Text Preview\n4. Auto-Save to Device")
+    st.markdown(f"**Active Key Pool:** {len(api_keys_pool)} Keys Loaded\n1. Multi-Key Load Balancing\n2. Instant Caching Speed\n3. Voice-to-Text & Auto-Save\n4. Poll-Style Quiz & A4 Paper")
 
 st.title("🚀 FormulaSaathi & Teacher Pro Suite")
 
 tab1, tab2, tab3 = st.tabs(["👨‍🎓 Student Zone & Solver", "👨‍🏫 Teacher A4 Paper Generator", "🎙️ Voice Assistant & Interactive Quiz"])
 
-# सुपर-फास्ट और स्मार्ट कैश्ड फंक्शन (जो एक बार पूछे गए सवाल को जिंदगी भर के लिए सेकंडों में खोल देगा)
+# सुपर-फास्ट और स्मार्ट कैश्ड फंक्शन जो अलग-अलग कीज़ से लोड बांटेगा
 @st.cache_data(show_spinner=False, ttl=86400)
-def cached_gemini_call(api_k, prompt_text):
-    if not api_k:
+def cached_gemini_call(prompt_text):
+    if not api_keys_pool:
         return None
-    client = genai.Client(api_key=api_k)
-    for attempt in range(15):
+    
+    # हर बार अगली चाबी का इस्तेमाल करेगा ताकि लिमिट पार न हो
+    for _ in range(len(api_keys_pool)):
+        current_key = next(key_cycler)
         try:
+            client = genai.Client(api_key=current_key)
             response = client.models.generate_content(
                 model="gemini-1.5-flash",
                 contents=prompt_text
@@ -68,7 +83,6 @@ def cached_gemini_call(api_k, prompt_text):
             if response and response.text:
                 return response.text
         except Exception as e:
-            time.sleep(1)
             continue
     return None
 
@@ -102,13 +116,13 @@ with tab1:
             with st.spinner("🎙️ आपकी आवाज को टेक्स्ट में बदला जा रहा है..."):
                 audio_bytes = audio_file.read()
                 trans_prompt = "Transcribe the given audio accurately into text in Hindi or English."
-                # ऑडियो के लिए डायरेक्ट क्लाइंट कॉल
                 try:
-                    cl = genai.Client(api_key=api_key)
-                    t_res = cl.models.generate_content(model="gemini-1.5-flash", contents=[trans_prompt, {"mime_type": "audio/wav", "data": audio_bytes}])
-                    if t_res and t_res.text:
-                        transcribed_voice_text = t_res.text
-                        st.info(f"📝 **रिकॉर्ड किया गया सवाल:** {transcribed_voice_text}")
+                    if api_keys_pool:
+                        cl = genai.Client(api_key=next(key_cycler))
+                        t_res = cl.models.generate_content(model="gemini-1.5-flash", contents=[trans_prompt, {"mime_type": "audio/wav", "data": audio_bytes}])
+                        if t_res and t_res.text:
+                            transcribed_voice_text = t_res.text
+                            st.info(f"📝 **रिकॉर्ड किया गया सवाल:** {transcribed_voice_text}")
                 except:
                     pass
 
@@ -117,10 +131,10 @@ with tab1:
         student_query = st.text_area("अपना सवाल या चैप्टर यहाँ लिखें (या ऊपर बोलकर रिकॉर्ड करें):", value=default_query_text, height=140, placeholder="उदाहरण: गति के नियमों को समझाएं...")
         
         if st.button("🔍 तुरंत हल देखें", key="btn_solve"):
-            if not api_key:
-                st.error("⚠️ कृपया Streamlit Secrets में GEMINI_API_KEY सेट करें!")
+            if not api_keys_pool:
+                st.error("⚠️ कृपया Streamlit Secrets में GEMINI_KEYS सेट करें!")
             else:
-                with st.spinner("⚡ AI समाधान तैयार कर रहा है (सुपर-फास्ट स्पीड मोड)..."):
+                with st.spinner("⚡ AI समाधान तैयार कर रहा है (मल्टी-की लोड बैलेंसर सक्रिय है)..."):
                     prompt_text = f"""
                     Expert tutor for {stu_class} studying {stu_subject}.
                     Language: {stu_lang}. No dollar signs ($) or raw LaTeX. Use clean text.
@@ -128,13 +142,11 @@ with tab1:
                     Provide clear steps and explanation.
                     """
                     
-                    # कैश्ड फंक्शन कॉल (रॉकेट स्पीड)
-                    res_text = cached_gemini_call(api_key, prompt_text)
+                    res_text = cached_gemini_call(prompt_text)
                     if res_text:
                         st.success("✅ समाधान तैयार है!")
                         st.markdown(res_text)
                         
-                        # ऑटोमैटिक फाइल डाउनलोड ट्रिगर
                         safe_res_json = json.dumps(res_text)
                         components.html(f"""
                         <script>
@@ -149,7 +161,7 @@ with tab1:
                         </script>
                         """, height=0)
                     else:
-                        st.error("⚠️ सर्वर से कनेक्ट करने में असमर्थ।")
+                        st.error("⚠️ सभी सर्वर चाबियाँ व्यस्त हैं। कृपया एक सेकंड बाद पुनः प्रयास करें।")
 
 # ==========================================
 # TAB 2: TEACHER A4 QUESTION PAPER GENERATOR
@@ -201,19 +213,19 @@ with tab2:
     include_answers = st.checkbox("अलग पेज पर Answer Key (उत्तर माला) जोड़ें", value=True)
 
     if st.button("✨ सुपर-फास्ट A4 क्वेश्चन पेपर तैयार करें"):
-        if not api_key:
-            st.error("⚠️ कृपया Streamlit Secrets में GEMINI_API_KEY सेट करें!")
+        if not api_keys_pool:
+            st.error("⚠️ कृपया Streamlit Secrets में GEMINI_KEYS सेट करें!")
         elif not topic_name.strip():
             st.warning("⚠️ कृपया चैप्टर का नाम लिखें!")
         else:
-            with st.spinner("⚡ प्रश्न-पत्र जनरेट हो रहा है (टर्बो स्पीड सक्रिय है)..."):
+            with st.spinner("⚡ प्रश्न-पत्र जनरेट हो रहा है (टर्बो मल्टी-की स्पीड सक्रिय है)..."):
                 t_prompt = f"""
                 Generate exam Question Paper in clean HTML format (ONLY inner HTML tags like <h4>, <ol>, <li>, <p>, NO markdown ```html fences).
                 Language: {paper_lang}. Class: {t_class}, Subject: {t_subject}, Topic: {topic_name}, Difficulty: {difficulty}.
                 Sections: MCQ: {mcq_q}, Fill blanks: {fib_q}, 2 Marks: {two_m_q}, 3 Marks: {three_m_q}, 5 Marks: {five_m_q}.
                 - {"At the end, insert Answer Key." if include_answers else ""}
                 """
-                res_html = cached_gemini_call(api_key, t_prompt)
+                res_html = cached_gemini_call(t_prompt)
                 if res_html:
                     clean_questions_html = res_html.replace("```html", "").replace("```", "").strip()
                     coaching_header = f"<div class='coaching-title'>{coaching_name.strip()}</div>" if coaching_name.strip() else ""
@@ -290,7 +302,7 @@ with tab3:
                     Act as a strict and encouraging school teacher doing oral revision before an exam for {v_subject}, Topic: {v_topic}.
                     Ask 3 revision questions one by one (1 short conceptual question, 1 two-mark question, 1 five-mark important question) in Hindi. Provide answers below each.
                     """
-                    v_res = cached_gemini_call(api_key, v_prompt)
+                    v_res = cached_gemini_call(v_prompt)
                     if v_res:
                         st.success("✅ ओरल रिवीजन सेट तैयार है!")
                         st.markdown(v_res)
@@ -328,7 +340,7 @@ with tab3:
                     ]
                     Return ONLY valid JSON, no markdown formatting fences if possible, or clean JSON text.
                     """
-                    raw_quiz = cached_gemini_call(api_key, quiz_prompt)
+                    raw_quiz = cached_gemini_call(quiz_prompt)
                     if raw_quiz:
                         try:
                             cleaned_json = raw_quiz.replace("```json", "").replace("```", "").strip()
